@@ -1,7 +1,9 @@
 
 
-import React, { useState, ReactNode, useEffect, useMemo, useRef, useCallback } from 'react';
-import { User, Role, RequestStatus, NoDueRequest, OnDutyRequest, Assignment, Attendance, Feedback, Notification, AttendanceStatus, Message, Announcement, NotificationType, Class, ClassMembership, SubmittedFile } from '../types';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import type { ReactNode } from 'react';
+import { User, Role, RequestStatus, NoDueRequest, OnDutyRequest, Assignment, Attendance, Feedback, AttendanceStatus, Message, Announcement, NotificationType, Class, ClassMembership, SubmittedFile } from '../types';
+import type { Notification } from '../types';
 import { MOCK_USERS, MOCK_NODUE_REQUESTS, MOCK_ONDUTY_REQUESTS, MOCK_ASSIGNMENTS, MOCK_ATTENDANCE, MOCK_FEEDBACK, MOCK_NOTIFICATIONS, MOCK_MESSAGES, MOCK_ANNOUNCEMENTS, MOCK_CLASSES, MOCK_CLASS_MEMBERSHIPS } from '../constants';
 import { Card, Button, StatusBadge, ConfirmationDialog, Modal } from './UI';
 import { HomeIcon, AttendanceIcon, AssignmentIcon, RequestIcon, FeedbackIcon, NotificationIcon, LogoutIcon, MenuIcon, CloseIcon, ApproveIcon, RejectIcon, UserIcon, SortAscIcon, SortDescIcon, UploadIcon, MessageIcon, SendIcon, AnnouncementIcon, ReplyIcon, ClassIcon, SunIcon, MoonIcon, SpinnerIcon, SearchIcon, EyeIcon } from './Icons';
@@ -367,7 +369,7 @@ const AssignmentView: React.FC<{
         const assignmentId = selectedAssignmentId;
         
         if (user.role === Role.STUDENT) {
-            const files = Array.from(e.target.files);
+            const files = Array.from(e.target.files) as File[];
             files.forEach(file => {
                 const uniqueFileKey = `${assignmentId}-${file.name}`;
                 setFileUploadProgress(prev => ({ ...prev, [uniqueFileKey]: 0 }));
@@ -399,7 +401,7 @@ const AssignmentView: React.FC<{
                 }, 200);
             });
         } else if (user.role === Role.STAFF) {
-             const file = e.target.files[0];
+             const file = e.target.files[0] as File | undefined;
              if (!file) return;
              const uniqueFileKey = `${assignmentId}-${file.name}`;
              setFileUploadProgress({ [uniqueFileKey]: 0 });
