@@ -176,7 +176,15 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-800 dark:text-zinc-200">
       {theme === 'dark' && <div className="aurora-bg" />}
       {currentUser ? (
-        <Dashboard user={currentUser} onLogout={handleLogout} theme={theme} toggleTheme={toggleTheme} updateUser={handleUpdateUser} />
+        <Dashboard 
+          user={currentUser} 
+          onLogout={handleLogout} 
+          theme={theme} 
+          toggleTheme={toggleTheme} 
+          updateUser={handleUpdateUser} 
+          allUsers={users}
+          onUpdateAllUsers={setUsers}
+        />
       ) : (
         <Login 
           onLogin={handleLogin} 

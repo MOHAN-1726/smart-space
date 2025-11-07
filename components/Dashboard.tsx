@@ -1,11 +1,11 @@
 
-import React from 'react';
-import { User, Role, RequestStatus, Assignment, Class, AttendanceStatus, ClassMembership } from '../types';
-import { MOCK_NODUE_REQUESTS, MOCK_ONDUTY_REQUESTS, MOCK_ASSIGNMENTS, MOCK_ATTENDANCE, MOCK_USERS, MOCK_ANNOUNCEMENTS } from '../constants';
-import { Card, Button } from './UI';
-import { StaffStats } from './StaffStats';
-import { AssignmentIcon, RequestIcon } from './Icons';
 
+import React, { useState, ReactNode, useEffect, useMemo, useRef, useCallback } from 'react';
+import { User, Role, RequestStatus, NoDueRequest, OnDutyRequest, Assignment, Attendance, Feedback, Notification, AttendanceStatus, Message, Announcement, NotificationType, Class, ClassMembership, SubmittedFile, Event } from '../types';
+import { MOCK_USERS, MOCK_NODUE_REQUESTS, MOCK_ONDUTY_REQUESTS, MOCK_ASSIGNMENTS, MOCK_ATTENDANCE, MOCK_FEEDBACK, MOCK_NOTIFICATIONS, MOCK_MESSAGES, MOCK_ANNOUNCEMENTS, MOCK_CLASSES, MOCK_CLASS_MEMBERSHIPS, MOCK_EVENTS } from '../constants';
+import { Card, Button, StatusBadge, ConfirmationDialog, Modal } from './UI';
+import { HomeIcon, AttendanceIcon, AssignmentIcon, RequestIcon, FeedbackIcon, NotificationIcon, LogoutIcon, MenuIcon, CloseIcon, ApproveIcon, RejectIcon, UserIcon, SortAscIcon, SortDescIcon, UploadIcon, MessageIcon, SendIcon, AnnouncementIcon, ReplyIcon, ClassIcon, SunIcon, MoonIcon, SpinnerIcon, SearchIcon, EyeIcon, EditIcon, CalendarIcon, ChevronLeftIcon, ChevronRightIcon, TrashIcon, GraduationCapIcon, KeyIcon, SparklesIcon } from './Icons';
+import ManageClassesView from './ManageClassesView';
 
 interface DashboardProps {
   user: User;
@@ -13,22 +13,16 @@ interface DashboardProps {
   theme: 'light' | 'dark';
   toggleTheme: () => void;
   updateUser: (user: User) => void;
+  allUsers: User[];
+  onUpdateAllUsers: React.Dispatch<React.SetStateAction<User[]>>;
 }
 
 // Sub-components for different views
-interface OverviewContentProps {
-  user: User;
-  setActiveView: (view: string) => void;
-  selectedClassId: string | null;
-  classes: Class[];
-}
-
-const OverviewContent: React.FC<OverviewContentProps> = ({ user, setActiveView, selectedClassId, classes }) => {
-
+const OverviewContent: React.FC<{ user: User, setActiveView: (view: string) => void, selectedClassId: string | null, classes: Class[] }> = ({ user, setActiveView, selectedClassId, classes }) => {
   const getStat = (title: string, value: string | number, color: string, index: number) => (
-    <Card className={`bg-gradient-to-br ${color} hover:scale-105 transition-transform duration-300 shadow-lg text-white animate-slideInUp !bg-opacity-100 rounded-xl p-6`} style={{ animationDelay: `${index * 100}ms` }}>
-      <p className="text-sm font-medium tracking-wide uppercase opacity-80">{title}</p>
-      <p className="text-3xl font-bold mt-2">{value}</p>
+    <Card className={`bg-gradient-to-br ${color} text-white animate-slideInUp !bg-opacity-100`} style={{ animationDelay: `${index * 100}ms` }}>
+      <p className="text-sm opacity-80">{title}</p>
+      <p className="text-3xl font-bold">{value}</p>
     </Card>
   );
 
@@ -39,7 +33,7 @@ const OverviewContent: React.FC<OverviewContentProps> = ({ user, setActiveView, 
     return data.filter(item => item.studentId === studentId && item.classId === selectedClassId);
   }
 
-  const selectedClass = classes.find(function(c) { return c.id === selectedClassId; });
+  const selectedClass = classes.find(c => c.id === selectedClassId);
   const title = selectedClass ? `Showing data for ${selectedClass.name}` : 'No class selected';
 
   switch (user.role) {
@@ -55,52 +49,36 @@ const OverviewContent: React.FC<OverviewContentProps> = ({ user, setActiveView, 
         const attendanceTitle = user.role === Role.STUDENT ? 'Attendance' : "Child's Attendance";
         const assignmentsTitle = user.role === Role.STUDENT ? 'Pending Assignments' : "Child's Pending Assignments";
       return (
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 px-4 sm:px-6 lg:px-8">
-          <div className="max-w-7xl mx-auto">
-            <h2 className="text-3xl font-extrabold text-gray-900 dark:text-white mb-2">{roleTitle}</h2>
-            <p className="text-lg text-zinc-600 dark:text-zinc-400 mb-8">{title}</p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              {getStat(attendanceTitle, `${attendancePercentage}%`, 'from-primary-500 to-primary-600', 0)}
-              {getStat(assignmentsTitle, pendingAssignments, 'from-yellow-500 to-yellow-600', 1)}
-              {user.role === Role.STUDENT && getStat('Active Requests', activeRequests, 'from-green-500 to-green-600', 2)}
-            </div>
-            {user.role === Role.STUDENT && <div className="mt-12">
-              <Card title="Quick Actions" className="animate-slideInUp bg-white dark:bg-gray-800 shadow-xl rounded-2xl" style={{ animationDelay: '400ms' }}>
-                <div className="flex flex-wrap gap-4 p-6">
-                  <Button 
-                    onClick={() => setActiveView('requests')}
-                    className="bg-primary-600 hover:bg-primary-700 text-white px-6 py-3 rounded-lg font-medium transition-colors duration-200 flex items-center gap-2"
-                  >
-                    <RequestIcon className="w-5 h-5" />
-                    Manage Requests
-                  </Button>
+        <div>
+          <h2 className="text-2xl font-bold mb-1">{roleTitle}</h2>
+          <p className="text-zinc-600 dark:text-zinc-400 mb-6">{title}</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {getStat(attendanceTitle, `${attendancePercentage}%`, 'from-primary-500 to-primary-600', 0)}
+            {getStat(assignmentsTitle, pendingAssignments, 'from-yellow-500 to-yellow-600', 1)}
+            {user.role === Role.STUDENT && getStat('Active Requests', activeRequests, 'from-green-500 to-green-600', 2)}
+          </div>
+           {user.role === Role.STUDENT && <div className="mt-8">
+            <Card title="Quick Actions" className="animate-slideInUp" style={{ animationDelay: '400ms' }}>
+                <div className="flex flex-wrap gap-4">
+                    <Button onClick={() => setActiveView('requests')}>Manage Requests</Button>
                 </div>
-              </Card>
-            </div>}
+            </Card>
+          </div>}
         </div>
       );
     }
     case Role.STAFF: {
-      const selectedClass = classes.find(c => c.id === selectedClassId);
-      const title = selectedClass ? `Showing data for ${selectedClass.name}` : 'No class selected';
-      
-      return (
-        <div className="p-6 bg-gray-50 dark:bg-gray-900">
-          <div className="max-w-7xl mx-auto">
-            <h2 className="text-3xl font-extrabold text-gray-900 dark:text-white mb-2">Staff Overview</h2>
-            <p className="text-lg text-zinc-600 dark:text-zinc-400 mb-8">{title}</p>
-            <StaffStats classId={selectedClassId} />
-            <div className="mt-12">
-              <Card className="bg-white dark:bg-gray-800 shadow-xl rounded-2xl p-6">
-                <h3 className="text-xl font-semibold mb-4">Quick Access</h3>
-                <div className="flex flex-wrap gap-4">
-                  <Button className="bg-primary-600 hover:bg-primary-700 text-white px-6 py-3 rounded-lg font-medium transition-colors duration-200 flex items-center gap-2">
-                    <AssignmentIcon className="w-5 h-5" />
-                    View All Assignments
-                  </Button>
-                </div>
-              </Card>
-            </div>
+       const pendingNoDue = MOCK_NODUE_REQUESTS.filter(r => r.status === RequestStatus.PENDING).length;
+       const pendingOnDuty = MOCK_ONDUTY_REQUESTS.filter(r => r.status === RequestStatus.PENDING).length;
+       const assignmentsToGrade = MOCK_ASSIGNMENTS.filter(a => a.status === 'Submitted' && a.classId === selectedClassId).length;
+       return (
+        <div>
+          <h2 className="text-2xl font-bold mb-1">Staff Overview</h2>
+          <p className="text-zinc-600 dark:text-zinc-400 mb-6">{title}</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {getStat('Pending No-Due', pendingNoDue, 'from-primary-500 to-primary-600', 0)}
+            {getStat('Pending On-Duty', pendingOnDuty, 'from-yellow-500 to-yellow-600', 1)}
+            {getStat('Assignments to Grade', assignmentsToGrade, 'from-green-500 to-green-600', 2)}
           </div>
         </div>
       );
@@ -109,37 +87,31 @@ const OverviewContent: React.FC<OverviewContentProps> = ({ user, setActiveView, 
   }
 };
 
-const ClassDashboardView = ({ user, selectedClassId, setActiveView, classes, classMemberships }: { 
-    user: User; 
-    selectedClassId: string | null; 
-    setActiveView: (view: string) => void; 
-    classes: Class[]; 
-    classMemberships: ClassMembership[]; 
-}) => {
-    const selectedClass = classes.find((c: Class) => c.id === selectedClassId);
+const ClassDashboardView: React.FC<{ user: User, selectedClassId: string | null, setActiveView: (view: string) => void, classes: Class[], classMemberships: ClassMembership[] }> = ({ user, selectedClassId, setActiveView, classes, classMemberships }) => {
+    const selectedClass = classes.find(c => c.id === selectedClassId);
 
     if (!selectedClass) {
         return <Card title="No Class Selected" className="animate-scaleIn"><p>Please select a class from the dropdown above to view its dashboard.</p></Card>;
     }
 
-    const currentClassMemberships = classMemberships.filter((cm: ClassMembership) => cm.classId === selectedClass.id);
-    const classMembers = currentClassMemberships.map((cm: ClassMembership) => {
-        const memberUser = MOCK_USERS.find((u: User) => u.id === cm.userId);
+    const currentClassMemberships = classMemberships.filter(cm => cm.classId === selectedClass.id);
+    const classMembers = currentClassMemberships.map(cm => {
+        const memberUser = MOCK_USERS.find(u => u.id === cm.userId);
         return { ...memberUser, roleInClass: cm.role };
-    }).filter((m: any) => m.id); // Filter out any potential undefined users
+    }).filter(m => m.id); // Filter out any potential undefined users
 
-    const staffMembers = classMembers.filter((m: any) => m.roleInClass === Role.STAFF);
-    const studentMembers = classMembers.filter((m: any) => m.roleInClass === Role.STUDENT);
+    const staffMembers = classMembers.filter(m => m.roleInClass === Role.STAFF);
+    const studentMembers = classMembers.filter(m => m.roleInClass === Role.STUDENT);
 
     const classAnnouncements = MOCK_ANNOUNCEMENTS
-        .filter(function(a) { return a.classId === selectedClass.id; })
-        .sort(function(a, b) { return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(); })
+        .filter(a => a.classId === selectedClass.id)
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
         .slice(0, 3);
         
     const studentId = user.role === Role.PARENT ? user.studentId : user.id;
-    const classAssignments = (user.role === Role.STAFF ? MOCK_ASSIGNMENTS : MOCK_ASSIGNMENTS.filter(function(a) { return a.studentId === studentId; }))
-        .filter(function(a) { return a.classId === selectedClass.id; })
-        .sort(function(a, b) { return new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime(); })
+    const classAssignments = (user.role === Role.STAFF ? MOCK_ASSIGNMENTS : MOCK_ASSIGNMENTS.filter(a => a.studentId === studentId))
+        .filter(a => a.classId === selectedClass.id)
+        .sort((a, b) => new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime())
         .slice(0, 5);
 
     return (
@@ -247,7 +219,7 @@ const ClassDashboardView = ({ user, selectedClassId, setActiveView, classes, cla
     );
 };
 
-const ProfileView: React.FC<{ user: User; onUpdateUser: (user: User) => void, onChangePassword: (oldPass: string, newPass: string) => {success: boolean, message: string{'}'} }> = ({ user, onUpdateUser, onChangePassword }) => {
+const ProfileView: React.FC<{ user: User; onUpdateUser: (user: User) => void, onChangePassword: (oldPass: string, newPass: string) => {success: boolean, message: string} }> = ({ user, onUpdateUser, onChangePassword }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [editableUser, setEditableUser] = useState(user);
     const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
@@ -1828,10 +1800,9 @@ const CalendarView: React.FC<{ user: User, events: Event[] }> = ({ user, events 
     );
 };
 
-const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, theme, toggleTheme, updateUser }) => {
+const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, theme, toggleTheme, updateUser, allUsers, onUpdateAllUsers }) => {
   const [activeView, setActiveView] = useState('overview');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [allUsers, setAllUsers] = useState<User[]>(MOCK_USERS);
   
   const [notifications, setNotifications] = useState<Notification[]>(MOCK_NOTIFICATIONS);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -1847,7 +1818,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, theme, toggleThem
   const [events, setEvents] = useState<Event[]>(MOCK_EVENTS);
   
   const onUpdateUser = (updatedUser: User) => {
-    setAllUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+    onUpdateAllUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
     if(updatedUser.id === user.id) {
         updateUser(updatedUser);
     }
@@ -1929,9 +1900,85 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, theme, toggleThem
         }
     };
 
+    const handleCreateClass = (name: string, description: string) => {
+      const newClass: Class = {
+        id: `C${Date.now()}`,
+        name,
+        description,
+      };
+      setClasses(prev => [...prev, newClass]);
+    };
+  
+    const handleAddStudentsToClass = (classId: string, studentIds: string[]) => {
+      const newMemberships: ClassMembership[] = studentIds.map(studentId => ({
+        id: `CM${Date.now()}${Math.random()}`,
+        userId: studentId,
+        classId,
+        role: Role.STUDENT,
+      }));
+      setClassMemberships(prev => [...prev, ...newMemberships]);
+  
+      onUpdateAllUsers(prevUsers => prevUsers.map(u => {
+        if (studentIds.includes(u.id)) {
+          if (!u.classIds.includes(classId)) {
+            const updatedUser = { ...u, classIds: [...u.classIds, classId] };
+            if (u.id === user.id) updateUser(updatedUser); // Update current user if they are the one being updated
+            return updatedUser;
+          }
+        }
+        return u;
+      }));
+    };
+  
+    const handleRemoveStudentFromClass = (classId: string, studentId: string) => {
+      setClassMemberships(prev => prev.filter(cm => !(cm.classId === classId && cm.userId === studentId)));
+  
+      onUpdateAllUsers(prevUsers => prevUsers.map(u => {
+        if (u.id === studentId) {
+          const updatedUser = { ...u, classIds: u.classIds.filter(id => id !== classId) };
+          if (u.id === user.id) updateUser(updatedUser);
+          return updatedUser;
+        }
+        return u;
+      }));
+    };
+
+    const handleUpdateClass = (classId: string, name: string, description: string) => {
+        setClasses(prev => prev.map(c => 
+          c.id === classId ? { ...c, name, description } : c
+        ));
+    };
+    
+    const handleDeleteClass = (classId: string) => {
+      // If the currently selected class is the one being deleted, reset selection
+      if (selectedClassId === classId) {
+        setSelectedClassId(null);
+      }
+    
+      // 1. Remove the class from state
+      setClasses(prev => prev.filter(c => c.id !== classId));
+    
+      // 2. Remove all memberships associated with that class
+      setClassMemberships(prev => prev.filter(cm => cm.classId !== classId));
+    
+      // 3. Update all users to remove the deleted classId from their classIds array
+      onUpdateAllUsers(prevUsers => prevUsers.map(u => {
+        if (u.classIds.includes(classId)) {
+          const updatedUser = { ...u, classIds: u.classIds.filter(id => id !== classId) };
+          // If the currently logged-in user is affected, update their state
+          if (u.id === user.id) {
+            updateUser(updatedUser);
+          }
+          return updatedUser;
+        }
+        return u;
+      }));
+    };
+
   const menuItems = [
     { name: 'Dashboard', icon: HomeIcon, view: 'overview' },
     { name: 'Class Dashboard', icon: ClassIcon, view: 'classDashboard' },
+    { name: 'Manage Classes', icon: GraduationCapIcon, view: 'manageClasses', roles: [Role.STAFF] },
     { name: 'Assignments', icon: AssignmentIcon, view: 'assignments' },
     { name: 'Attendance', icon: AttendanceIcon, view: 'attendance' },
     { name: 'Requests', icon: RequestIcon, view: 'requests' },
@@ -1939,7 +1986,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, theme, toggleThem
     { name: 'Messages', icon: MessageIcon, view: 'messages' },
     { name: 'Announcements', icon: AnnouncementIcon, view: 'announcements' },
     { name: 'Calendar', icon: CalendarIcon, view: 'calendar' },
-    { name: 'AI Tools', icon: SparklesIcon, view: 'aiTools', roles: [Role.STUDENT, Role.STAFF] },
     { name: 'Feedback', icon: FeedbackIcon, view: 'feedback', roles: [Role.STUDENT] },
   ].filter(item => !item.roles || item.roles.includes(user.role));
 
@@ -1949,6 +1995,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, theme, toggleThem
     switch (activeView) {
       case 'overview': return <OverviewContent user={user} setActiveView={setActiveView} selectedClassId={selectedClassId} classes={classes} />;
       case 'classDashboard': return <ClassDashboardView user={user} selectedClassId={selectedClassId} setActiveView={setActiveView} classes={classes} classMemberships={classMemberships} />;
+      case 'manageClasses': return <ManageClassesView user={user} classes={classes} classMemberships={classMemberships} allUsers={allUsers} onCreateClass={handleCreateClass} onAddStudents={handleAddStudentsToClass} onRemoveStudent={handleRemoveStudentFromClass} onUpdateClass={handleUpdateClass} onDeleteClass={handleDeleteClass} />;
       case 'assignments': return <AssignmentView user={user} selectedClassId={selectedClassId} assignments={assignments} setAssignments={setAssignments} notifications={notifications} setNotifications={setNotifications} />;
       case 'attendance': return <AttendanceView user={user} selectedClassId={selectedClassId} />;
       case 'requests': return <RequestsView user={user} onDutyRequests={onDutyRequests} noDueRequests={noDueRequests} onAddNoDueRequest={handleAddNewNoDueRequest} onUpdateNoDueRequestStatus={handleUpdateNoDueRequestStatus} />;

@@ -1,4 +1,5 @@
 
+
 import React, { ReactNode } from 'react';
 import { RequestStatus } from '../types';
 
@@ -9,7 +10,7 @@ interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 export const Card: React.FC<CardProps> = ({ children, className = '', title, ...props }) => (
-  <div className={`bg-white dark:bg-zinc-900/70 dark:backdrop-blur-sm rounded-xl overflow-hidden dark:border dark:border-white/10 ${className}`} {...props}>
+  <div className={`bg-white dark:bg-zinc-800 rounded-xl overflow-hidden dark:border dark:border-zinc-700 ${className}`} {...props}>
     {title && <h3 className="text-lg font-semibold text-zinc-800 dark:text-zinc-200 px-6 pt-4">{title}</h3>}
     <div className="p-6">{children}</div>
   </div>
@@ -65,6 +66,7 @@ interface ConfirmationDialogProps {
   children: ReactNode;
   confirmText?: string;
   confirmVariant?: 'primary' | 'secondary' | 'danger' | 'success';
+  confirmDisabled?: boolean;
 }
 
 export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
@@ -75,6 +77,7 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
   children,
   confirmText = 'Confirm',
   confirmVariant = 'primary',
+  confirmDisabled = false,
 }) => {
   if (!isOpen) return null;
 
@@ -93,7 +96,7 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant={confirmVariant} onClick={onConfirm}>
+          <Button variant={confirmVariant} onClick={onConfirm} disabled={confirmDisabled}>
             {confirmText}
           </Button>
         </div>

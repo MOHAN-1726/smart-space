@@ -5,6 +5,29 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Student Activity Portal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      .dark .aurora-bg {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100vh;
+        background-image: radial-gradient(ellipse 80% 80% at 50% -20%, rgba(20, 184, 166, 0.1), transparent);
+        z-index: 0;
+        pointer-events: none;
+      }
+      #root {
+        position: relative;
+        z-index: 1;
+      }
+    </style>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              primary: {
                 '50': '#f0fdfa',
                 '100': '#ccfbf1',
                 '200': '#99f6e4',
