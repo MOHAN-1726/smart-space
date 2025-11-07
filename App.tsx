@@ -1,5 +1,3 @@
-
-
 import React, { useState, useCallback, useEffect } from 'react';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
@@ -13,6 +11,8 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [theme, setTheme] = useState<Theme>('light');
+  const [emailForVerification, setEmailForVerification] = useState<string | null>(null);
+  const [verificationOtp, setVerificationOtp] = useState<string | null>(null);
 
   useEffect(() => {
     // Check for saved theme in localStorage
@@ -47,17 +47,24 @@ const App: React.FC = () => {
     setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
   };
 
-  const handleLogin = useCallback((email: string): boolean => {
-    const user = users.find(u => u.email === email);
+  const handleLogin = useCallback((email: string, password: string): { success: boolean; message: string; verificationRequired?: boolean; } => {
+    const user = users.find(u => u.email === email && u.password === password);
     if (user) {
-      setCurrentUser(user);
-      localStorage.setItem('currentUser', JSON.stringify(user));
-      return true;
+        if (user.isVerified === false) {
+            const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
+            setVerificationOtp(newOtp);
+            setEmailForVerification(email);
+            console.log(`Verification required. Simulated OTP for ${email}: ${newOtp}`);
+            return { success: false, verificationRequired: true, message: 'Account is not verified. An OTP has been sent.' };
+        }
+        setCurrentUser(user);
+        localStorage.setItem('currentUser', JSON.stringify(user));
+        return { success: true, message: 'Login successful' };
     }
-    return false;
+    return { success: false, message: 'Invalid credentials. Please try again.' };
   }, [users]);
   
-  const handleRegister = useCallback((name: string, email: string, role: Role): { success: boolean; message: string } => {
+  const handleRegister = useCallback((name: string, email: string, role: Role, password: string): { success: boolean; message: string } => {
     if (users.some(u => u.email === email)) {
         return { success: false, message: 'An account with this email already exists.' };
     }
@@ -67,6 +74,8 @@ const App: React.FC = () => {
         name,
         email,
         role,
+        password,
+        isVerified: false, // Start as not verified
         classIds: [],
         ...(role === Role.STUDENT && { rollNo: `S${String(Date.now()).slice(-4)}`, department: 'Unassigned', year: 1 }),
         ...(role === Role.STAFF && { staffId: `T${String(Date.now()).slice(-4)}`, designation: 'Instructor' }),
@@ -74,10 +83,13 @@ const App: React.FC = () => {
     };
 
     setUsers(prev => [...prev, newUser]);
-    setCurrentUser(newUser);
-    localStorage.setItem('currentUser', JSON.stringify(newUser));
+    
+    const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    setVerificationOtp(newOtp);
+    setEmailForVerification(email);
+    console.log(`Registration successful. Simulated OTP for ${email}: ${newOtp}`);
 
-    return { success: true, message: 'Registration successful!' };
+    return { success: true, message: 'Registration successful! Please check your email for a verification OTP.' };
   }, [users]);
 
 
@@ -87,25 +99,94 @@ const App: React.FC = () => {
   }, []);
   
   const handleUpdateUser = useCallback((updatedUser: User) => {
-    setCurrentUser(updatedUser);
-    setUsers(prevUsers => prevUsers.map(u => u.id === updatedUser.id ? updatedUser : u));
-    localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+    setUsers(prevUsers => {
+      const newUsers = prevUsers.map(u => u.id === updatedUser.id ? updatedUser : u);
+      // Also update the current user if they are the one being updated
+      if (currentUser && currentUser.id === updatedUser.id) {
+        setCurrentUser(updatedUser);
+        localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+      }
+      return newUsers;
+    });
+  }, [currentUser]);
+
+  const checkUserExists = useCallback((email: string): boolean => {
+    return users.some(u => u.email === email);
+  }, [users]);
+
+  const handlePasswordReset = useCallback((email: string, newPassword: string): boolean => {
+    let userFound = false;
+    setUsers(prevUsers => prevUsers.map(u => {
+      if (u.email === email) {
+        userFound = true;
+        return { ...u, password: newPassword };
+      }
+      return u;
+    }));
+    return userFound;
   }, []);
+
+  const handleVerifyAndLogin = useCallback((otp: string): { success: boolean; message: string } => {
+    if (!emailForVerification || !verificationOtp) {
+        return { success: false, message: 'Verification process not initiated.' };
+    }
+
+    if (otp === verificationOtp) {
+        let verifiedUser: User | null = null;
+        setUsers(prevUsers => prevUsers.map(u => {
+            if (u.email === emailForVerification) {
+                verifiedUser = { ...u, isVerified: true };
+                return verifiedUser;
+            }
+            return u;
+        }));
+
+        if (verifiedUser) {
+            setCurrentUser(verifiedUser);
+            localStorage.setItem('currentUser', JSON.stringify(verifiedUser));
+            setEmailForVerification(null);
+            setVerificationOtp(null);
+            return { success: true, message: 'Email verified successfully!' };
+        }
+        return { success: false, message: 'Could not find user to verify.' };
+    }
+
+    return { success: false, message: 'Invalid OTP. Please try again.' };
+  }, [emailForVerification, verificationOtp, users]);
+
+  const handleResendOtp = useCallback(() => {
+    if (emailForVerification) {
+        const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
+        setVerificationOtp(newOtp);
+        console.log(`Resent simulated OTP for ${emailForVerification}: ${newOtp}`);
+        return { success: true, message: 'A new OTP has been sent.' };
+    }
+    return { success: false, message: 'No email found to resend OTP to.' };
+  }, [emailForVerification]);
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-100 dark:bg-slate-900">
-        <div className="text-xl font-semibold text-slate-700 dark:text-slate-300">Loading...</div>
+      <div className="flex items-center justify-center min-h-screen bg-zinc-100 dark:bg-zinc-900">
+        <div className="text-xl font-semibold text-zinc-700 dark:text-zinc-300">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200">
+    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-800 dark:text-zinc-200">
+      {theme === 'dark' && <div className="aurora-bg" />}
       {currentUser ? (
         <Dashboard user={currentUser} onLogout={handleLogout} theme={theme} toggleTheme={toggleTheme} updateUser={handleUpdateUser} />
       ) : (
-        <Login onLogin={handleLogin} onRegister={handleRegister} />
+        <Login 
+          onLogin={handleLogin} 
+          onRegister={handleRegister} 
+          onCheckUser={checkUserExists} 
+          onPasswordReset={handlePasswordReset} 
+          onVerifyAndLogin={handleVerifyAndLogin}
+          onResendOtp={handleResendOtp}
+          verificationEmail={emailForVerification}
+        />
       )}
     </div>
   );

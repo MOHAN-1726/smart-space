@@ -11,7 +11,7 @@ export interface Class {
 }
 
 export interface ClassMembership {
-  id: string;
+  id:string;
   userId: string;
   classId: string;
   role: Role.STUDENT | Role.STAFF;
@@ -23,6 +23,8 @@ export interface User {
   email: string;
   role: Role;
   classIds: string[];
+  password?: string;
+  isVerified?: boolean;
   // Role-specific properties
   rollNo?: string;
   department?: string;
@@ -70,7 +72,8 @@ export interface Assignment {
   studentId: string;
   classId: string;
   subject: string;
-  submissionDate: string;
+  dueDate: string;
+  submittedOn?: string;
   submittedFiles?: SubmittedFile[];
   gradedFileUrl?: string;
   grade?: string;
@@ -137,4 +140,15 @@ export interface Announcement {
   content: string;
   timestamp: string;
   targetAudience: 'STUDENT' | 'PARENT' | 'ALL';
+}
+
+export interface Event {
+  id: string;
+  title: string;
+  description: string;
+  start: string; // ISO Date string e.g., '2023-11-20'
+  end: string;   // ISO Date string e.g., '2023-11-22'
+  classId?: string; // Optional for class-specific events
+  audience: 'STUDENT' | 'PARENT' | 'STAFF' | 'ALL';
+  color: 'blue' | 'green' | 'red' | 'yellow' | 'purple';
 }
