@@ -24,6 +24,13 @@ export const AttendanceIcon = (props: React.SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+export const LeaveIcon = (props: React.SVGProps<SVGSVGElement>) => (
+    <svg {...iconProps} {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m-3 0l-3-3m0 0l3-3m-3 3h12.75" />
+    </svg>
+);
+
+
 export const CalendarIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg {...iconProps} {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0h18M9.75 14.25h.008v.008H9.75v-.008zM12.75 14.25h.008v.008H12.75v-.008zM15.75 14.25h.008v.008H15.75v-.008zM9.75 17.25h.008v.008H9.75v-.008zM12.75 17.25h.008v.008H12.75v-.008zM15.75 17.25h.008v.008H15.75v-.008z" />
@@ -217,6 +224,12 @@ export const SparklesIcon = (props: React.SVGProps<SVGSVGElement>) => (
 export const DocumentTextIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg {...iconProps} {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+    </svg>
+);
+
+export const BookOpenIcon = (props: React.SVGProps<SVGSVGElement>) => (
+    <svg {...iconProps} {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
     </svg>
 );
 

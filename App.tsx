@@ -166,14 +166,14 @@ const App: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-zinc-100 dark:bg-zinc-900">
-        <div className="text-xl font-semibold text-zinc-700 dark:text-zinc-300">Loading...</div>
+      <div className="flex items-center justify-center min-h-screen bg-blue-50 dark:bg-slate-950">
+        <div className="text-xl font-semibold text-slate-700 dark:text-slate-300">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-800 dark:text-zinc-200">
+    <div className="min-h-screen bg-blue-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
       {theme === 'dark' && <div className="aurora-bg" />}
       {currentUser ? (
         <Dashboard 

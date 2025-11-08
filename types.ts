@@ -10,10 +10,17 @@ export interface Class {
   description: string;
 }
 
+export interface Section {
+  id: string;
+  name: string;
+  classId: string;
+}
+
 export interface ClassMembership {
   id:string;
   userId: string;
   classId: string;
+  sectionId?: string | null;
   role: Role.STUDENT | Role.STAFF;
 }
 
@@ -25,6 +32,7 @@ export interface User {
   classIds: string[];
   password?: string;
   isVerified?: boolean;
+  profilePhotoUrl?: string;
   // Role-specific properties
   rollNo?: string;
   department?: string;
@@ -55,6 +63,17 @@ export interface OnDutyRequest {
   studentId: string;
   studentName: string;
   eventName: string;
+  fromDate: string;
+  toDate: string;
+  status: RequestStatus;
+  reason: string;
+}
+
+export interface LeaveRequest {
+  id: string;
+  studentId: string;
+  studentName: string;
+  leaveType: 'Sick Leave' | 'Casual Leave' | 'Emergency';
   fromDate: string;
   toDate: string;
   status: RequestStatus;
@@ -151,4 +170,18 @@ export interface Event {
   classId?: string; // Optional for class-specific events
   audience: 'STUDENT' | 'PARENT' | 'STAFF' | 'ALL';
   color: 'blue' | 'green' | 'red' | 'yellow' | 'purple';
+}
+
+export interface ClassMaterial {
+  id: string;
+  classId: string;
+  title: string;
+  description: string;
+  subject: string;
+  fileName: string;
+  fileUrl: string;
+  fileSize: number; // in bytes
+  uploadedBy: string; // staffId
+  uploadedByName: string;
+  uploadDate: string; // ISO Date string
 }

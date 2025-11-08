@@ -1,4 +1,4 @@
-import { Role, User, NoDueRequest, OnDutyRequest, Assignment, Attendance, Feedback, Notification, RequestStatus, AttendanceStatus, NotificationType, Message, Announcement, Class, ClassMembership, Event } from './types';
+import { Role, User, NoDueRequest, OnDutyRequest, Assignment, Attendance, Feedback, Notification, RequestStatus, AttendanceStatus, NotificationType, Message, Announcement, Class, ClassMembership, Event, Section, LeaveRequest, ClassMaterial } from './types';
 
 export const MOCK_CLASSES: Class[] = [
   { id: 'C1', name: 'CS101: Intro to Computer Science', description: 'Fundamental concepts of programming and computer science.' },
@@ -6,23 +6,33 @@ export const MOCK_CLASSES: Class[] = [
   { id: 'C3', name: 'ME202: Thermodynamics', description: 'Principles of heat and energy transfer.' },
 ];
 
+export const MOCK_SECTIONS: Section[] = [
+  { id: 'S1', name: 'Section A', classId: 'C1' },
+  { id: 'S2', name: 'Section B', classId: 'C1' },
+  { id: 'S3', name: 'Section A', classId: 'C2' },
+];
+
 export const MOCK_CLASS_MEMBERSHIPS: ClassMembership[] = [
     // Mohanraj
-    { id: 'CM1', userId: '1', classId: 'C1', role: Role.STUDENT },
-    { id: 'CM2', userId: '1', classId: 'C2', role: Role.STUDENT },
+    { id: 'CM1', userId: '1', classId: 'C1', sectionId: 'S1', role: Role.STUDENT },
+    { id: 'CM2', userId: '1', classId: 'C2', sectionId: 'S3', role: Role.STUDENT },
     // Akash
     { id: 'CM3', userId: '4', classId: 'C3', role: Role.STUDENT },
     // Arthi Priyadharshini
     { id: 'CM4', userId: '2', classId: 'C1', role: Role.STAFF },
     { id: 'CM5', userId: '2', classId: 'C2', role: Role.STAFF },
     { id: 'CM6', userId: '2', classId: 'C3', role: Role.STAFF },
+    // Another student in C1, Section B
+    { id: 'CM7', userId: '5', classId: 'C1', sectionId: 'S2', role: Role.STUDENT },
 ];
 
 export const MOCK_USERS: User[] = [
-  { id: '1', name: 'Mohanraj', email: 'student1@mail.com', role: Role.STUDENT, password: 'password123', rollNo: 'S001', department: 'Computer Science', year: 3, classIds: ['C1', 'C2'] },
-  { id: '2', name: 'Arthi Priyadharshini', email: 'staff1@mail.com', role: Role.STAFF, password: 'password123', staffId: 'T001', designation: 'Professor', classIds: ['C1', 'C2', 'C3'] },
-  { id: '3', name: 'Sivakami', email: 'parent1@mail.com', role: Role.PARENT, password: 'password123', studentId: '1', classIds: [] },
-  { id: '4', name: 'Akash', email: 'student2@mail.com', role: Role.STUDENT, password: 'password123', rollNo: 'S002', department: 'Mechanical Engineering', year: 2, classIds: ['C3'] },
+  { id: '1', name: 'Mohanraj', email: 'student1@mail.com', role: Role.STUDENT, password: 'password123', rollNo: 'S001', department: 'Computer Science', year: 3, classIds: ['C1', 'C2'], profilePhotoUrl: `https://i.pravatar.cc/150?u=1` },
+  { id: '2', name: 'Arthi Priyadharshini', email: 'staff1@mail.com', role: Role.STAFF, password: 'password123', staffId: 'T001', designation: 'Professor', classIds: ['C1', 'C2', 'C3'], profilePhotoUrl: `https://i.pravatar.cc/150?u=2` },
+  { id: '3', name: 'Sivakami', email: 'parent1@mail.com', role: Role.PARENT, password: 'password123', studentId: '1', classIds: [], profilePhotoUrl: `https://i.pravatar.cc/150?u=3` },
+  { id: '4', name: 'Akash', email: 'student2@mail.com', role: Role.STUDENT, password: 'password123', rollNo: 'S002', department: 'Mechanical Engineering', year: 2, classIds: ['C3'], profilePhotoUrl: `https://i.pravatar.cc/150?u=4` },
+  { id: '5', name: 'Sathya', email: 'student3@mail.com', role: Role.STUDENT, password: 'password123', rollNo: 'S003', department: 'Computer Science', year: 3, classIds: ['C1'], profilePhotoUrl: `https://i.pravatar.cc/150?u=5` },
+
 ];
 
 export const MOCK_NODUE_REQUESTS: NoDueRequest[] = [
@@ -33,6 +43,12 @@ export const MOCK_NODUE_REQUESTS: NoDueRequest[] = [
 export const MOCK_ONDUTY_REQUESTS: OnDutyRequest[] = [
   { id: 'OD001', studentId: '1', studentName: 'Mohanraj', eventName: 'Tech Symposium 2023', fromDate: '2023-11-05', toDate: '2023-11-06', status: RequestStatus.PENDING, reason: 'Presenting a paper.' },
   { id: 'OD002', studentId: '4', studentName: 'Akash', eventName: 'Sports Meet', fromDate: '2023-11-10', toDate: '2023-11-10', status: RequestStatus.REJECTED, reason: 'Participation not confirmed by sports head.' },
+];
+
+export const MOCK_LEAVE_REQUESTS: LeaveRequest[] = [
+  { id: 'LR001', studentId: '1', studentName: 'Mohanraj', leaveType: 'Sick Leave', fromDate: '2023-11-12', toDate: '2023-11-13', status: RequestStatus.APPROVED, reason: 'Fever and cold.' },
+  { id: 'LR002', studentId: '4', studentName: 'Akash', leaveType: 'Casual Leave', fromDate: '2023-11-15', toDate: '2023-11-15', status: RequestStatus.PENDING, reason: 'Family function.' },
+  { id: 'LR003', studentId: '5', studentName: 'Sathya', leaveType: 'Emergency', fromDate: '2023-11-09', toDate: '2023-11-10', status: RequestStatus.REJECTED, reason: 'Attending a cousin\'s wedding.' },
 ];
 
 export const MOCK_ASSIGNMENTS: Assignment[] = [
@@ -87,4 +103,46 @@ export const MOCK_EVENTS: Event[] = [
   { id: 'E005', title: 'Staff Development Workshop', description: 'Workshop on new teaching methodologies.', start: '2023-11-25', end: '2023-11-25', audience: 'STAFF', color: 'purple' },
   { id: 'E006', title: 'Winter Break', description: 'College closed for winter break.', start: '2023-12-23', end: '2024-01-02', audience: 'ALL', color: 'blue' },
   { id: 'E007', title: 'CS101 Guest Lecture', description: 'Guest lecture on AI by an industry expert.', start: '2023-11-10', end: '2023-11-10', classId: 'C1', audience: 'STUDENT', color: 'yellow' },
+];
+
+export const MOCK_CLASS_MATERIALS: ClassMaterial[] = [
+  {
+    id: 'CMAT001',
+    classId: 'C1',
+    title: 'Lecture 1: Introduction to Python',
+    description: 'Slides from the first lecture covering basic Python syntax and concepts.',
+    subject: 'Programming Fundamentals',
+    fileName: 'lecture1_intro_python.pdf',
+    fileUrl: '#',
+    fileSize: 1572864, // 1.5 MB
+    uploadedBy: '2',
+    uploadedByName: 'Arthi Priyadharshini',
+    uploadDate: '2023-10-10',
+  },
+  {
+    id: 'CMAT002',
+    classId: 'C2',
+    title: 'Assignment 3: Big O Notation',
+    description: 'Problem set for analyzing algorithm complexity.',
+    subject: 'Advanced Algorithms',
+    fileName: 'assignment3_big_o.docx',
+    fileUrl: '#',
+    fileSize: 45056, // 44 KB
+    uploadedBy: '2',
+    uploadedByName: 'Arthi Priyadharshini',
+    uploadDate: '2023-11-01',
+  },
+  {
+    id: 'CMAT003',
+    classId: 'C1',
+    title: 'Lab 2: SQL Queries',
+    description: 'Instructions for the second database lab.',
+    subject: 'Database Management',
+    fileName: 'lab2_sql_queries.pdf',
+    fileUrl: '#',
+    fileSize: 819200, // 800 KB
+    uploadedBy: '2',
+    uploadedByName: 'Arthi Priyadharshini',
+    uploadDate: '2023-10-25',
+  },
 ];

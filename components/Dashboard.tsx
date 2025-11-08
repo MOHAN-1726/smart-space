@@ -1,10 +1,8 @@
-
-
 import React, { useState, ReactNode, useEffect, useMemo, useRef, useCallback } from 'react';
-import { User, Role, RequestStatus, NoDueRequest, OnDutyRequest, Assignment, Attendance, Feedback, Notification, AttendanceStatus, Message, Announcement, NotificationType, Class, ClassMembership, SubmittedFile, Event } from '../types';
-import { MOCK_USERS, MOCK_NODUE_REQUESTS, MOCK_ONDUTY_REQUESTS, MOCK_ASSIGNMENTS, MOCK_ATTENDANCE, MOCK_FEEDBACK, MOCK_NOTIFICATIONS, MOCK_MESSAGES, MOCK_ANNOUNCEMENTS, MOCK_CLASSES, MOCK_CLASS_MEMBERSHIPS, MOCK_EVENTS } from '../constants';
-import { Card, Button, StatusBadge, ConfirmationDialog, Modal } from './UI';
-import { HomeIcon, AttendanceIcon, AssignmentIcon, RequestIcon, FeedbackIcon, NotificationIcon, LogoutIcon, MenuIcon, CloseIcon, ApproveIcon, RejectIcon, UserIcon, SortAscIcon, SortDescIcon, UploadIcon, MessageIcon, SendIcon, AnnouncementIcon, ReplyIcon, ClassIcon, SunIcon, MoonIcon, SpinnerIcon, SearchIcon, EyeIcon, EditIcon, CalendarIcon, ChevronLeftIcon, ChevronRightIcon, TrashIcon, GraduationCapIcon, KeyIcon, SparklesIcon } from './Icons';
+import { User, Role, RequestStatus, NoDueRequest, OnDutyRequest, Assignment, Attendance, Feedback, Notification, AttendanceStatus, Message, Announcement, NotificationType, Class, ClassMembership, SubmittedFile, Event, Section, LeaveRequest, ClassMaterial } from '../types';
+import { MOCK_USERS, MOCK_NODUE_REQUESTS, MOCK_ONDUTY_REQUESTS, MOCK_ASSIGNMENTS, MOCK_ATTENDANCE, MOCK_FEEDBACK, MOCK_NOTIFICATIONS, MOCK_MESSAGES, MOCK_ANNOUNCEMENTS, MOCK_CLASSES, MOCK_CLASS_MEMBERSHIPS, MOCK_EVENTS, MOCK_SECTIONS, MOCK_LEAVE_REQUESTS, MOCK_CLASS_MATERIALS } from '../constants';
+import { Card, Button, StatusBadge, ConfirmationDialog, Modal, ProfilePicture } from './UI';
+import { HomeIcon, AttendanceIcon, AssignmentIcon, RequestIcon, FeedbackIcon, NotificationIcon, LogoutIcon, MenuIcon, CloseIcon, ApproveIcon, RejectIcon, UserIcon, SortAscIcon, SortDescIcon, UploadIcon, MessageIcon, SendIcon, AnnouncementIcon, ReplyIcon, ClassIcon, SunIcon, MoonIcon, SpinnerIcon, SearchIcon, EyeIcon, EditIcon, CalendarIcon, ChevronLeftIcon, ChevronRightIcon, TrashIcon, GraduationCapIcon, KeyIcon, SparklesIcon, LeaveIcon, DocumentTextIcon, BookOpenIcon } from './Icons';
 import ManageClassesView from './ManageClassesView';
 
 interface DashboardProps {
@@ -17,6 +15,9 @@ interface DashboardProps {
   onUpdateAllUsers: React.Dispatch<React.SetStateAction<User[]>>;
 }
 
+const inputClasses = "block w-full p-2 border rounded-lg bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-offset-slate-900";
+const searchInputClasses = "pl-10 pr-4 py-2 w-full border rounded-lg bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-offset-slate-900";
+
 // Sub-components for different views
 const OverviewContent: React.FC<{ user: User, setActiveView: (view: string) => void, selectedClassId: string | null, classes: Class[] }> = ({ user, setActiveView, selectedClassId, classes }) => {
   const getStat = (title: string, value: string | number, color: string, index: number) => (
@@ -28,13 +29,14 @@ const OverviewContent: React.FC<{ user: User, setActiveView: (view: string) => v
 
   const studentId = user.role === Role.PARENT ? user.studentId : user.id;
 
-  const getFilteredData = <T extends { studentId: string; classId: string; }>(data: T[]) => {
-    if (!studentId || !selectedClassId) return [];
+  const getFilteredData = <T extends { studentId: string; classId?: string; }>(data: T[]) => {
+    if (!studentId) return [];
+    if (!selectedClassId || selectedClassId === 'ALL') return data.filter(item => item.studentId === studentId);
     return data.filter(item => item.studentId === studentId && item.classId === selectedClassId);
   }
 
   const selectedClass = classes.find(c => c.id === selectedClassId);
-  const title = selectedClass ? `Showing data for ${selectedClass.name}` : 'No class selected';
+  const title = selectedClassId === 'ALL' ? 'Showing data for All Classes' : (selectedClass ? `Showing data for ${selectedClass.name}` : 'No class selected');
 
   switch (user.role) {
     case Role.STUDENT:
@@ -51,11 +53,11 @@ const OverviewContent: React.FC<{ user: User, setActiveView: (view: string) => v
       return (
         <div>
           <h2 className="text-2xl font-bold mb-1">{roleTitle}</h2>
-          <p className="text-zinc-600 dark:text-zinc-400 mb-6">{title}</p>
+          <p className="text-slate-600 dark:text-slate-400 mb-6">{title}</p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {getStat(attendanceTitle, `${attendancePercentage}%`, 'from-primary-500 to-primary-600', 0)}
-            {getStat(assignmentsTitle, pendingAssignments, 'from-yellow-500 to-yellow-600', 1)}
-            {user.role === Role.STUDENT && getStat('Active Requests', activeRequests, 'from-green-500 to-green-600', 2)}
+            {getStat(attendanceTitle, `${attendancePercentage}%`, 'from-blue-500 to-indigo-600', 0)}
+            {getStat(assignmentsTitle, pendingAssignments, 'from-amber-500 to-orange-600', 1)}
+            {user.role === Role.STUDENT && getStat('Active Requests', activeRequests, 'from-green-500 to-emerald-600', 2)}
           </div>
            {user.role === Role.STUDENT && <div className="mt-8">
             <Card title="Quick Actions" className="animate-slideInUp" style={{ animationDelay: '400ms' }}>
@@ -70,15 +72,15 @@ const OverviewContent: React.FC<{ user: User, setActiveView: (view: string) => v
     case Role.STAFF: {
        const pendingNoDue = MOCK_NODUE_REQUESTS.filter(r => r.status === RequestStatus.PENDING).length;
        const pendingOnDuty = MOCK_ONDUTY_REQUESTS.filter(r => r.status === RequestStatus.PENDING).length;
-       const assignmentsToGrade = MOCK_ASSIGNMENTS.filter(a => a.status === 'Submitted' && a.classId === selectedClassId).length;
+       const assignmentsToGrade = MOCK_ASSIGNMENTS.filter(a => a.status === 'Submitted' && (selectedClassId === 'ALL' || a.classId === selectedClassId)).length;
        return (
         <div>
           <h2 className="text-2xl font-bold mb-1">Staff Overview</h2>
-          <p className="text-zinc-600 dark:text-zinc-400 mb-6">{title}</p>
+          <p className="text-slate-600 dark:text-slate-400 mb-6">{title}</p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {getStat('Pending No-Due', pendingNoDue, 'from-primary-500 to-primary-600', 0)}
-            {getStat('Pending On-Duty', pendingOnDuty, 'from-yellow-500 to-yellow-600', 1)}
-            {getStat('Assignments to Grade', assignmentsToGrade, 'from-green-500 to-green-600', 2)}
+            {getStat('Pending No-Due', pendingNoDue, 'from-blue-500 to-indigo-600', 0)}
+            {getStat('Pending On-Duty', pendingOnDuty, 'from-amber-500 to-orange-600', 1)}
+            {getStat('Assignments to Grade', assignmentsToGrade, 'from-green-500 to-emerald-600', 2)}
           </div>
         </div>
       );
@@ -117,8 +119,8 @@ const ClassDashboardView: React.FC<{ user: User, selectedClassId: string | null,
     return (
         <div>
             <div className="mb-6">
-                <h2 className="text-3xl font-bold text-zinc-800 dark:text-zinc-100">{selectedClass.name}</h2>
-                <p className="text-zinc-600 dark:text-zinc-400 mt-1">{selectedClass.description}</p>
+                <h2 className="text-3xl font-bold text-slate-900 dark:text-slate-100">{selectedClass.name}</h2>
+                <p className="text-slate-600 dark:text-slate-400 mt-1">{selectedClass.description}</p>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -127,15 +129,15 @@ const ClassDashboardView: React.FC<{ user: User, selectedClassId: string | null,
                         {classAnnouncements.length > 0 ? (
                             <div className="space-y-4">
                                 {classAnnouncements.map(ann => (
-                                    <div key={ann.id} className="border-b border-zinc-200 dark:border-white/10 pb-3 last:border-b-0 last:pb-0">
-                                        <h4 className="font-semibold text-zinc-800 dark:text-zinc-200">{ann.title}</h4>
-                                        <p className="text-sm text-zinc-600 dark:text-zinc-400 truncate">{ann.content}</p>
-                                        <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">By {ann.staffName} on {new Date(ann.timestamp).toLocaleDateString()}</p>
+                                    <div key={ann.id} className="border-b border-slate-200 dark:border-white/10 pb-3 last:border-b-0 last:pb-0">
+                                        <h4 className="font-semibold text-slate-900 dark:text-slate-100">{ann.title}</h4>
+                                        <p className="text-sm text-slate-600 dark:text-slate-400 truncate">{ann.content}</p>
+                                        <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">By {ann.staffName} on {new Date(ann.timestamp).toLocaleDateString()}</p>
                                     </div>
                                 ))}
                             </div>
                         ) : (
-                            <p className="text-zinc-500 dark:text-zinc-400">No announcements for this class.</p>
+                            <p className="text-slate-500 dark:text-slate-400">No announcements for this class.</p>
                         )}
                         <div className="mt-4 flex justify-end">
                             {user.role === Role.STAFF && <Button variant="secondary" onClick={() => setActiveView('announcements')}>New Announcement</Button>}
@@ -147,7 +149,7 @@ const ClassDashboardView: React.FC<{ user: User, selectedClassId: string | null,
                         {classAssignments.length > 0 ? (
                              <div className="overflow-x-auto">
                                 <table className="w-full text-sm">
-                                    <thead className="text-left text-zinc-500 dark:text-zinc-400">
+                                    <thead className="text-left text-slate-500 dark:text-slate-400">
                                         <tr>
                                             {user.role === Role.STAFF && <th className="p-2">Student</th>}
                                             <th className="p-2">Subject</th>
@@ -157,9 +159,9 @@ const ClassDashboardView: React.FC<{ user: User, selectedClassId: string | null,
                                     </thead>
                                     <tbody>
                                         {classAssignments.map(asg => (
-                                            <tr key={asg.id} className="border-t border-zinc-200 dark:border-white/10">
+                                            <tr key={asg.id} className="border-t border-slate-200 dark:border-white/10">
                                                 {user.role === Role.STAFF && <td className="p-2">{MOCK_USERS.find(u => u.id === asg.studentId)?.name}</td>}
-                                                <td className="p-2 font-medium text-zinc-800 dark:text-zinc-200">{asg.subject}</td>
+                                                <td className="p-2 font-medium text-slate-900 dark:text-slate-100">{asg.subject}</td>
                                                 <td className="p-2">{asg.dueDate}</td>
                                                 <td className="p-2"><StatusBadge status={asg.status} /></td>
                                             </tr>
@@ -168,7 +170,7 @@ const ClassDashboardView: React.FC<{ user: User, selectedClassId: string | null,
                                 </table>
                             </div>
                         ) : (
-                            <p className="text-zinc-500 dark:text-zinc-400">No assignments for this class.</p>
+                            <p className="text-slate-500 dark:text-slate-400">No assignments for this class.</p>
                         )}
                          <div className="mt-4 flex justify-end">
                             <Button onClick={() => setActiveView('assignments')}>View All</Button>
@@ -179,26 +181,26 @@ const ClassDashboardView: React.FC<{ user: User, selectedClassId: string | null,
                 <div className="space-y-6">
                     <Card title="Members" className="animate-slideInUp" style={{ animationDelay: '200ms' }}>
                          <div>
-                            <h4 className="font-semibold text-sm text-zinc-600 dark:text-zinc-400 mb-2">Staff ({staffMembers.length})</h4>
+                            <h4 className="font-semibold text-sm text-slate-600 dark:text-slate-400 mb-2">Staff ({staffMembers.length})</h4>
                             <ul className="space-y-2">
                                 {staffMembers.map(member => (
                                     <li key={member.id} className="flex items-center gap-3">
-                                        <img src={`https://i.pravatar.cc/40?u=${member.id}`} alt={member.name} className="w-8 h-8 rounded-full" />
-                                        <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">{member.name}</span>
+                                        <ProfilePicture user={member} size="sm" />
+                                        <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{member.name}</span>
                                     </li>
                                 ))}
                             </ul>
                          </div>
                          <div className="mt-4">
-                             <h4 className="font-semibold text-sm text-zinc-600 dark:text-zinc-400 mb-2">Students ({studentMembers.length})</h4>
+                             <h4 className="font-semibold text-sm text-slate-600 dark:text-slate-400 mb-2">Students ({studentMembers.length})</h4>
                             <ul className="space-y-1 -mx-1 pr-1 max-h-60 overflow-y-auto">
                                 {studentMembers.map(member => (
-                                    <li key={member.id} className="flex items-center gap-3 p-1.5 rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-700/50">
-                                        <img src={`https://i.pravatar.cc/40?u=${member.id}`} alt={member.name} className="w-8 h-8 rounded-full flex-shrink-0" />
+                                    <li key={member.id} className="flex items-center gap-3 p-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                                        <ProfilePicture user={member} size="sm" />
                                         <div>
-                                            <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">{member.name}</p>
+                                            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{member.name}</p>
                                             {(member.rollNo || member.department) && (
-                                                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                                                <p className="text-xs text-slate-500 dark:text-slate-400">
                                                     {member.rollNo}{member.rollNo && member.department && ' • '}{member.department}
                                                 </p>
                                             )}
@@ -210,7 +212,7 @@ const ClassDashboardView: React.FC<{ user: User, selectedClassId: string | null,
                     </Card>
 
                     <Card title="Communication" className="animate-slideInUp" style={{ animationDelay: '300ms' }}>
-                        <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-4">Jump into the class conversation to ask questions or get help.</p>
+                        <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">Jump into the class conversation to ask questions or get help.</p>
                         <Button className="w-full" onClick={() => setActiveView('messages')}>Open Messages</Button>
                     </Card>
                 </div>
@@ -228,6 +230,7 @@ const ProfileView: React.FC<{ user: User; onUpdateUser: (user: User) => void, on
     const [confirmNewPassword, setConfirmNewPassword] = useState('');
     const [passwordError, setPasswordError] = useState('');
     const [passwordSuccess, setPasswordSuccess] = useState('');
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
       setEditableUser(user);
@@ -271,21 +274,54 @@ const ProfileView: React.FC<{ user: User; onUpdateUser: (user: User) => void, on
           setPasswordError(result.message);
       }
     };
+    
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setEditableUser(prev => ({ ...prev, profilePhotoUrl: reader.result as string }));
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const handleRemovePhoto = () => {
+        setEditableUser(prev => ({ ...prev, profilePhotoUrl: undefined }));
+    };
 
     return (
         <div>
             <h2 className="text-2xl font-bold mb-6">My Profile</h2>
             <Card className="animate-scaleIn">
                 <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
-                    <div className="relative group">
-                        <img 
-                            src={`https://i.pravatar.cc/150?u=${user.id}`} 
-                            alt="Profile" 
-                            className="w-32 h-32 rounded-full border-4 border-primary-200 dark:border-primary-700"
+                    <div className="flex flex-col items-center w-32 flex-shrink-0">
+                        <input
+                            type="file"
+                            ref={fileInputRef}
+                            onChange={handleFileChange}
+                            className="hidden"
+                            accept="image/*"
                         />
+                        <ProfilePicture user={editableUser} size="xl" className="border-4 border-blue-200 dark:border-blue-700"/>
                         {isEditing && (
-                            <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-                                <UploadIcon className="w-8 h-8 text-white" />
+                            <div className="mt-4 flex flex-col items-center gap-2 w-full">
+                                <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="w-full"
+                                >
+                                    Change Photo
+                                </Button>
+                                {editableUser.profilePhotoUrl && (
+                                    <button
+                                        onClick={handleRemovePhoto}
+                                        className="text-sm text-red-600 dark:text-red-500 hover:underline"
+                                    >
+                                        Remove Photo
+                                    </button>
+                                )}
                             </div>
                         )}
                     </div>
@@ -295,46 +331,46 @@ const ProfileView: React.FC<{ user: User; onUpdateUser: (user: User) => void, on
                                 type="text"
                                 value={editableUser.name}
                                 onChange={(e) => setEditableUser(prev => ({ ...prev, name: e.target.value }))}
-                                className="text-3xl font-bold text-zinc-800 dark:text-zinc-200 bg-transparent border-b-2 border-primary-300 dark:border-primary-700 focus:outline-none"
+                                className="text-3xl font-bold text-slate-900 dark:text-slate-100 bg-transparent border-b-2 border-blue-300 dark:border-blue-700 focus:outline-none"
                             />
                         ) : (
-                            <h3 className="text-3xl font-bold text-zinc-800 dark:text-zinc-200">{user.name}</h3>
+                            <h3 className="text-3xl font-bold text-slate-900 dark:text-slate-100">{user.name}</h3>
                         )}
 
                         {user.role === Role.STUDENT && (
-                            <p className="text-primary-600 dark:text-primary-400 font-medium mt-1">
+                            <p className="text-blue-600 dark:text-blue-400 font-medium mt-1">
                                 {user.rollNo} &bull; {user.department}, Year {user.year}
                             </p>
                         )}
                          {user.role === Role.STAFF && (
-                            <p className="text-primary-600 dark:text-primary-400 font-medium mt-1">
+                            <p className="text-blue-600 dark:text-blue-400 font-medium mt-1">
                                 {user.staffId} &bull; {user.designation}
                             </p>
                         )}
                         
-                        <div className="mt-6 border-t dark:border-white/10 pt-4">
+                        <div className="mt-6 border-t dark:border-slate-700 pt-4">
                             <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
                                 <div className="sm:col-span-1">
-                                    <dt className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Email</dt>
+                                    <dt className="text-sm font-medium text-slate-500 dark:text-slate-400">Email</dt>
                                     {isEditing ? (
                                         <input 
                                             type="email"
                                             value={editableUser.email}
                                             onChange={(e) => setEditableUser(prev => ({...prev, email: e.target.value}))}
-                                            className="mt-1 text-sm text-zinc-900 dark:text-zinc-100 bg-transparent border-b dark:border-zinc-600 focus:outline-none"
+                                            className="mt-1 text-sm text-slate-900 dark:text-slate-100 bg-transparent border-b dark:border-slate-600 focus:outline-none"
                                         />
                                     ): (
-                                        <dd className="mt-1 text-sm text-zinc-900 dark:text-zinc-100">{user.email}</dd>
+                                        <dd className="mt-1 text-sm text-slate-900 dark:text-slate-100">{user.email}</dd>
                                     )}
                                 </div>
                                 <div className="sm:col-span-1">
-                                    <dt className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Role</dt>
-                                    <dd className="mt-1 text-sm text-zinc-900 dark:text-zinc-100 capitalize">{user.role.toLowerCase()}</dd>
+                                    <dt className="text-sm font-medium text-slate-500 dark:text-slate-400">Role</dt>
+                                    <dd className="mt-1 text-sm text-slate-900 dark:text-slate-100 capitalize">{user.role.toLowerCase()}</dd>
                                 </div>
                                 {user.role === Role.PARENT && user.studentId && (
                                     <div className="sm:col-span-2">
-                                        <dt className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Child's Name</dt>
-                                        <dd className="mt-1 text-sm text-zinc-900 dark:text-zinc-100">{MOCK_USERS.find(u => u.id === user.studentId)?.name || 'N/A'}</dd>
+                                        <dt className="text-sm font-medium text-slate-500 dark:text-slate-400">Child's Name</dt>
+                                        <dd className="mt-1 text-sm text-slate-900 dark:text-slate-100">{MOCK_USERS.find(u => u.id === user.studentId)?.name || 'N/A'}</dd>
                                     </div>
                                 )}
                             </dl>
@@ -365,15 +401,15 @@ const ProfileView: React.FC<{ user: User; onUpdateUser: (user: User) => void, on
                     {passwordSuccess && <p className="text-green-500 text-sm">{passwordSuccess}</p>}
                     <div>
                         <label className="block text-sm font-medium">Old Password</label>
-                        <input type="password" value={oldPassword} onChange={e => setOldPassword(e.target.value)} className="mt-1 block w-full p-2 border rounded-md bg-white dark:bg-zinc-700 border-zinc-300 dark:border-zinc-600" />
+                        <input type="password" value={oldPassword} onChange={e => setOldPassword(e.target.value)} className={`mt-1 ${inputClasses}`} />
                     </div>
                      <div>
                         <label className="block text-sm font-medium">New Password</label>
-                        <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="mt-1 block w-full p-2 border rounded-md bg-white dark:bg-zinc-700 border-zinc-300 dark:border-zinc-600" />
+                        <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className={`mt-1 ${inputClasses}`} />
                     </div>
                      <div>
                         <label className="block text-sm font-medium">Confirm New Password</label>
-                        <input type="password" value={confirmNewPassword} onChange={e => setConfirmNewPassword(e.target.value)} className="mt-1 block w-full p-2 border rounded-md bg-white dark:bg-zinc-700 border-zinc-300 dark:border-zinc-600" />
+                        <input type="password" value={confirmNewPassword} onChange={e => setConfirmNewPassword(e.target.value)} className={`mt-1 ${inputClasses}`} />
                     </div>
                 </div>
             </Modal>
@@ -426,7 +462,7 @@ const NoDueRequestView: React.FC<{
             </div>
             <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left">
-                    <thead className="bg-zinc-50 dark:bg-zinc-700/50 text-zinc-600 dark:text-zinc-400">
+                    <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-400">
                         <tr>
                             {user.role !== Role.STUDENT && <th className="px-4 py-2">Student Name</th>}
                             <th className="px-4 py-2">Department</th>
@@ -438,7 +474,7 @@ const NoDueRequestView: React.FC<{
                     </thead>
                     <tbody>
                         {userRequests.map(req => (
-                            <tr key={req.id} className="border-b dark:border-white/10">
+                            <tr key={req.id} className="border-b dark:border-slate-700">
                                 {user.role !== Role.STUDENT && <td className="px-4 py-2">{req.studentName}</td>}
                                 <td className="px-4 py-2">{req.department}</td>
                                 <td className="px-4 py-2">{req.requestedDate}</td>
@@ -448,10 +484,10 @@ const NoDueRequestView: React.FC<{
                                     <td className="px-4 py-2">
                                         {req.status === RequestStatus.PENDING && (
                                             <div className="flex justify-center items-center gap-2">
-                                                <button onClick={() => setConfirmAction({ action: 'Approve', request: req })} className="p-1.5 text-green-500 rounded-full hover:bg-green-100 dark:hover:bg-green-900/50" aria-label="Approve">
+                                                <button onClick={() => setConfirmAction({ action: 'Approve', request: req })} className="p-1.5 text-green-500 rounded-full hover:bg-green-100 dark:hover:bg-green-500/20" aria-label="Approve">
                                                     <ApproveIcon className="w-5 h-5" />
                                                 </button>
-                                                <button onClick={() => setConfirmAction({ action: 'Reject', request: req })} className="p-1.5 text-red-500 rounded-full hover:bg-red-100 dark:hover:bg-red-900/50" aria-label="Reject">
+                                                <button onClick={() => setConfirmAction({ action: 'Reject', request: req })} className="p-1.5 text-red-500 rounded-full hover:bg-red-100 dark:hover:bg-red-500/20" aria-label="Reject">
                                                     <RejectIcon className="w-5 h-5" />
                                                 </button>
                                             </div>
@@ -463,7 +499,7 @@ const NoDueRequestView: React.FC<{
                     </tbody>
                 </table>
             </div>
-            {userRequests.length === 0 && <p className="text-center text-zinc-500 dark:text-zinc-400 py-8">No requests found.</p>}
+            {userRequests.length === 0 && <p className="text-center text-slate-500 dark:text-slate-400 py-8">No requests found.</p>}
             
             <Modal
                 isOpen={isNewRequestModalOpen}
@@ -473,25 +509,25 @@ const NoDueRequestView: React.FC<{
             >
                 <div className="space-y-4">
                     <div>
-                        <label htmlFor="department" className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Department</label>
+                        <label htmlFor="department" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Department</label>
                         <select
                             id="department"
                             value={newRequestDept}
                             onChange={(e) => setNewRequestDept(e.target.value)}
-                            className="w-full p-2 border rounded-md bg-zinc-50 dark:bg-zinc-700 border-zinc-300 dark:border-zinc-600"
+                            className={inputClasses}
                         >
                             <option value="" disabled>Select a department</option>
                             {DEPARTMENTS.map(dept => <option key={dept} value={dept}>{dept}</option>)}
                         </select>
                     </div>
                      <div>
-                        <label htmlFor="remarks" className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Remarks (Optional)</label>
+                        <label htmlFor="remarks" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Remarks (Optional)</label>
                         <textarea
                             id="remarks"
                             rows={3}
                             value={newRequestRemarks}
                             onChange={(e) => setNewRequestRemarks(e.target.value)}
-                            className="w-full p-2 border rounded-md bg-zinc-50 dark:bg-zinc-700 border-zinc-300 dark:border-zinc-600"
+                            className={inputClasses}
                             placeholder="Enter any additional information..."
                         />
                     </div>
@@ -513,13 +549,25 @@ const NoDueRequestView: React.FC<{
 };
 
 
-const OnDutyRequestView: React.FC<{ user: User, requests: OnDutyRequest[] }> = ({ user, requests }) => {
+const OnDutyRequestView: React.FC<{
+    user: User;
+    requests: OnDutyRequest[];
+    onUpdateStatus: (requestId: string, status: RequestStatus) => void;
+}> = ({ user, requests, onUpdateStatus }) => {
+    const [confirmAction, setConfirmAction] = useState<{ action: 'Approve' | 'Reject'; request: OnDutyRequest } | null>(null);
     const studentId = user.role === Role.PARENT ? user.studentId : user.id;
 
     const userRequests = useMemo(() => {
         if (user.role === Role.STAFF) return requests;
         return requests.filter(r => r.studentId === studentId);
     }, [user, requests, studentId]);
+
+    const handleConfirm = () => {
+        if (confirmAction) {
+            onUpdateStatus(confirmAction.request.id, confirmAction.action === 'Approve' ? RequestStatus.APPROVED : RequestStatus.REJECTED);
+            setConfirmAction(null);
+        }
+    };
 
     return (
         <Card className="animate-slideInUp">
@@ -531,7 +579,7 @@ const OnDutyRequestView: React.FC<{ user: User, requests: OnDutyRequest[] }> = (
             </div>
             <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left">
-                    <thead className="bg-zinc-50 dark:bg-zinc-700/50 text-zinc-600 dark:text-zinc-400">
+                    <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-400">
                         <tr>
                             {user.role !== Role.STUDENT && <th className="px-4 py-2">Student Name</th>}
                             <th className="px-4 py-2">Event</th>
@@ -543,7 +591,7 @@ const OnDutyRequestView: React.FC<{ user: User, requests: OnDutyRequest[] }> = (
                     </thead>
                     <tbody>
                         {userRequests.map(req => (
-                            <tr key={req.id} className="border-b dark:border-white/10">
+                            <tr key={req.id} className="border-b dark:border-slate-700">
                                 {user.role !== Role.STUDENT && <td className="px-4 py-2">{req.studentName}</td>}
                                 <td className="px-4 py-2">{req.eventName}</td>
                                 <td className="px-4 py-2">{req.fromDate} to {req.toDate}</td>
@@ -553,10 +601,10 @@ const OnDutyRequestView: React.FC<{ user: User, requests: OnDutyRequest[] }> = (
                                     <td className="px-4 py-2">
                                         {req.status === RequestStatus.PENDING && (
                                             <div className="flex justify-center items-center gap-2">
-                                                <button className="p-1.5 text-green-500 rounded-full hover:bg-green-100 dark:hover:bg-green-900/50" aria-label="Approve">
+                                                <button onClick={() => setConfirmAction({ action: 'Approve', request: req })} className="p-1.5 text-green-500 rounded-full hover:bg-green-100 dark:hover:bg-green-500/20" aria-label="Approve">
                                                     <ApproveIcon className="w-5 h-5" />
                                                 </button>
-                                                <button className="p-1.5 text-red-500 rounded-full hover:bg-red-100 dark:hover:bg-red-900/50" aria-label="Reject">
+                                                <button onClick={() => setConfirmAction({ action: 'Reject', request: req })} className="p-1.5 text-red-500 rounded-full hover:bg-red-100 dark:hover:bg-red-500/20" aria-label="Reject">
                                                     <RejectIcon className="w-5 h-5" />
                                                 </button>
                                             </div>
@@ -568,7 +616,136 @@ const OnDutyRequestView: React.FC<{ user: User, requests: OnDutyRequest[] }> = (
                     </tbody>
                 </table>
             </div>
-            {userRequests.length === 0 && <p className="text-center text-zinc-500 dark:text-zinc-400 py-8">No requests found.</p>}
+            {userRequests.length === 0 && <p className="text-center text-slate-500 dark:text-slate-400 py-8">No requests found.</p>}
+
+            <ConfirmationDialog
+                isOpen={!!confirmAction}
+                onClose={() => setConfirmAction(null)}
+                onConfirm={handleConfirm}
+                title={`${confirmAction?.action} Request`}
+                confirmText={confirmAction?.action}
+                confirmVariant={confirmAction?.action === 'Approve' ? 'success' : 'danger'}
+            >
+                Are you sure you want to {confirmAction?.action.toLowerCase()} the on-duty request from <strong>{confirmAction?.request.studentName}</strong> for the event <strong>{confirmAction?.request.eventName}</strong>?
+            </ConfirmationDialog>
+        </Card>
+    );
+};
+
+const LeaveRequestView: React.FC<{
+    user: User;
+    requests: LeaveRequest[];
+    onUpdateStatus: (requestId: string, status: RequestStatus) => void;
+    onAddRequest: (request: Omit<LeaveRequest, 'id' | 'status' | 'studentName'>) => void;
+}> = ({ user, requests, onUpdateStatus, onAddRequest }) => {
+    const [confirmAction, setConfirmAction] = useState<{ action: 'Approve' | 'Reject'; request: LeaveRequest } | null>(null);
+    const [isNewRequestModalOpen, setIsNewRequestModalOpen] = useState(false);
+    const [newRequest, setNewRequest] = useState({
+        leaveType: 'Casual Leave' as LeaveRequest['leaveType'],
+        fromDate: '',
+        toDate: '',
+        reason: '',
+    });
+
+    const studentId = user.role === Role.PARENT ? user.studentId : user.id;
+    
+    const userRequests = useMemo(() => {
+        if (user.role === Role.STAFF) return requests;
+        return requests.filter(r => r.studentId === studentId);
+    }, [user, requests, studentId]);
+
+    const handleConfirm = () => {
+        if (confirmAction) {
+            onUpdateStatus(confirmAction.request.id, confirmAction.action === 'Approve' ? RequestStatus.APPROVED : RequestStatus.REJECTED);
+            setConfirmAction(null);
+        }
+    };
+
+    const handleNewRequestSubmit = () => {
+        if (!newRequest.fromDate || !newRequest.toDate || !newRequest.reason) {
+            alert("Please fill all fields.");
+            return;
+        }
+        onAddRequest({ ...newRequest, studentId: user.id });
+        setIsNewRequestModalOpen(false);
+        setNewRequest({ leaveType: 'Casual Leave', fromDate: '', toDate: '', reason: '' });
+    };
+
+    return (
+        <Card className="animate-slideInUp">
+            <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-semibold">Leave Requests</h3>
+                {user.role === Role.STUDENT && (
+                    <Button onClick={() => setIsNewRequestModalOpen(true)}>New Request</Button>
+                )}
+            </div>
+            <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                     <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-400">
+                        <tr>
+                            {user.role !== Role.STUDENT && <th className="px-4 py-2">Student Name</th>}
+                            <th className="px-4 py-2">Leave Type</th>
+                            <th className="px-4 py-2">Dates</th>
+                            <th className="px-4 py-2">Status</th>
+                            <th className="px-4 py-2">Reason</th>
+                            {user.role === Role.STAFF && <th className="px-4 py-2 text-center">Actions</th>}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {userRequests.map(req => (
+                             <tr key={req.id} className="border-b dark:border-slate-700">
+                                {user.role !== Role.STUDENT && <td className="px-4 py-2">{req.studentName}</td>}
+                                <td className="px-4 py-2">{req.leaveType}</td>
+                                <td className="px-4 py-2">{req.fromDate} to {req.toDate}</td>
+                                <td className="px-4 py-2"><StatusBadge status={req.status} /></td>
+                                <td className="px-4 py-2">{req.reason}</td>
+                                {user.role === Role.STAFF && (
+                                    <td className="px-4 py-2">
+                                        {req.status === RequestStatus.PENDING && (
+                                             <div className="flex justify-center items-center gap-2">
+                                                <button onClick={() => setConfirmAction({ action: 'Approve', request: req })} className="p-1.5 text-green-500 rounded-full hover:bg-green-100 dark:hover:bg-green-500/20" aria-label="Approve"><ApproveIcon className="w-5 h-5" /></button>
+                                                <button onClick={() => setConfirmAction({ action: 'Reject', request: req })} className="p-1.5 text-red-500 rounded-full hover:bg-red-100 dark:hover:bg-red-500/20" aria-label="Reject"><RejectIcon className="w-5 h-5" /></button>
+                                            </div>
+                                        )}
+                                    </td>
+                                )}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+            {userRequests.length === 0 && <p className="text-center text-slate-500 dark:text-slate-400 py-8">No leave requests found.</p>}
+            
+            <Modal isOpen={isNewRequestModalOpen} onClose={() => setIsNewRequestModalOpen(false)} title="New Leave Request" footer={<><Button variant="secondary" onClick={() => setIsNewRequestModalOpen(false)}>Cancel</Button><Button onClick={handleNewRequestSubmit}>Submit</Button></>}>
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium">Leave Type</label>
+                        <select value={newRequest.leaveType} onChange={e => setNewRequest(prev => ({ ...prev, leaveType: e.target.value as LeaveRequest['leaveType'] }))} className={`mt-1 ${inputClasses}`}>
+                            <option>Sick Leave</option>
+                            <option>Casual Leave</option>
+                            <option>Emergency</option>
+                        </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium">From Date</label>
+                            <input type="date" value={newRequest.fromDate} onChange={e => setNewRequest(prev => ({ ...prev, fromDate: e.target.value }))} className={`mt-1 ${inputClasses}`} />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium">To Date</label>
+                            <input type="date" value={newRequest.toDate} onChange={e => setNewRequest(prev => ({ ...prev, toDate: e.target.value }))} className={`mt-1 ${inputClasses}`} />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium">Reason</label>
+                        <textarea rows={3} value={newRequest.reason} onChange={e => setNewRequest(prev => ({ ...prev, reason: e.target.value }))} className={`mt-1 ${inputClasses}`} />
+                    </div>
+                </div>
+            </Modal>
+            
+            <ConfirmationDialog isOpen={!!confirmAction} onClose={() => setConfirmAction(null)} onConfirm={handleConfirm} title={`${confirmAction?.action} Request`} confirmVariant={confirmAction?.action === 'Approve' ? 'success' : 'danger'}>
+                Are you sure you want to {confirmAction?.action.toLowerCase()} the leave request from <strong>{confirmAction?.request.studentName}</strong>?
+            </ConfirmationDialog>
         </Card>
     );
 };
@@ -577,18 +754,22 @@ const RequestsView: React.FC<{
   user: User;
   onDutyRequests: OnDutyRequest[];
   noDueRequests: NoDueRequest[];
+  leaveRequests: LeaveRequest[];
   onAddNoDueRequest: (department: string, remarks: string) => void;
   onUpdateNoDueRequestStatus: (requestId: string, status: RequestStatus, remarks?: string) => void;
+  onUpdateOnDutyRequestStatus: (requestId: string, status: RequestStatus) => void;
+  onUpdateLeaveRequestStatus: (requestId: string, status: RequestStatus) => void;
+  onAddLeaveRequest: (request: Omit<LeaveRequest, 'id' | 'status' | 'studentName'>) => void;
 }> = (props) => {
-    const [activeTab, setActiveTab] = useState<'onDuty' | 'noDue'>('onDuty');
+    const [activeTab, setActiveTab] = useState<'onDuty' | 'noDue' | 'leave'>('onDuty');
 
-    const TabButton: React.FC<{ tabName: 'onDuty' | 'noDue'; label: string }> = ({ tabName, label }) => (
+    const TabButton: React.FC<{ tabName: 'onDuty' | 'noDue' | 'leave'; label: string }> = ({ tabName, label }) => (
         <button
             onClick={() => setActiveTab(tabName)}
             className={`px-4 py-2 text-sm font-semibold rounded-md transition-colors ${
                 activeTab === tabName
-                    ? 'bg-primary-600 text-white'
-                    : 'text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700/50'
+                    ? 'bg-blue-500 text-white'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700/50'
             }`}
         >
             {label}
@@ -597,16 +778,29 @@ const RequestsView: React.FC<{
 
     return (
         <div>
-            <h2 className="text-2xl font-bold mb-6">Manage Requests</h2>
+            <h2 className="text-2xl font-bold mb-6">My Requests</h2>
             <div className="mb-6">
-                <div className="flex items-center gap-2 p-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-lg max-w-min">
-                    <TabButton tabName="onDuty" label="On-Duty Requests" />
-                    <TabButton tabName="noDue" label="No-Due Requests" />
+                <div className="flex items-center gap-2 p-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg max-w-min">
+                    <TabButton tabName="onDuty" label="On-Duty" />
+                    <TabButton tabName="leave" label="Leave" />
+                    <TabButton tabName="noDue" label="No-Due" />
                 </div>
             </div>
 
             {activeTab === 'onDuty' && (
-                <OnDutyRequestView user={props.user} requests={props.onDutyRequests} />
+                <OnDutyRequestView
+                    user={props.user}
+                    requests={props.onDutyRequests}
+                    onUpdateStatus={props.onUpdateOnDutyRequestStatus}
+                />
+            )}
+             {activeTab === 'leave' && (
+                <LeaveRequestView
+                    user={props.user}
+                    requests={props.leaveRequests}
+                    onUpdateStatus={props.onUpdateLeaveRequestStatus}
+                    onAddRequest={props.onAddLeaveRequest}
+                />
             )}
             {activeTab === 'noDue' && (
                 <NoDueRequestView
@@ -627,8 +821,8 @@ const AssignmentDetailsModal: React.FC<{ assignment: Assignment | null; onClose:
 
     const DetailItem: React.FC<{ label: string; children: ReactNode }> = ({ label, children }) => (
         <div>
-            <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">{label}</p>
-            <div className="mt-1 text-zinc-800 dark:text-zinc-200">{children}</div>
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{label}</p>
+            <div className="mt-1 text-slate-900 dark:text-slate-100">{children}</div>
         </div>
     );
     
@@ -638,7 +832,7 @@ const AssignmentDetailsModal: React.FC<{ assignment: Assignment | null; onClose:
                  {user.role === Role.STAFF && student && (
                     <DetailItem label="Student">
                        <div className="flex items-center gap-2">
-                            <img src={`https://i.pravatar.cc/40?u=${student.id}`} alt={student.name} className="w-8 h-8 rounded-full" />
+                            <ProfilePicture user={student} size="sm" />
                             <span>{student.name} ({student.rollNo})</span>
                         </div>
                     </DetailItem>
@@ -655,7 +849,7 @@ const AssignmentDetailsModal: React.FC<{ assignment: Assignment | null; onClose:
                              <ul className="space-y-2">
                                 {assignment.submittedFiles.map(file => (
                                     <li key={file.name}>
-                                        <a href={file.url} target="_blank" rel="noopener noreferrer" className="text-primary-600 dark:text-primary-400 hover:underline">
+                                        <a href={file.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">
                                             {file.name} ({(file.size / 1024).toFixed(2)} KB)
                                         </a>
                                     </li>
@@ -668,7 +862,7 @@ const AssignmentDetailsModal: React.FC<{ assignment: Assignment | null; onClose:
                 <div className="sm:col-span-2">
                     <DetailItem label="Graded File">
                         {assignment.gradedFileUrl ? (
-                             <a href={assignment.gradedFileUrl} target="_blank" rel="noopener noreferrer" className="text-primary-600 dark:text-primary-400 hover:underline">
+                             <a href={assignment.gradedFileUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">
                                 View Graded File
                             </a>
                         ) : 'No graded file available.'}
@@ -708,21 +902,21 @@ const AssignmentEditModal: React.FC<{
         >
              <div className="space-y-4">
                 <div>
-                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Subject</label>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Subject</label>
                     <input
                         type="text"
                         value={editedAssignment.subject}
                         onChange={(e) => setEditedAssignment(prev => prev ? { ...prev, subject: e.target.value } : null)}
-                        className="mt-1 block w-full px-3 py-2 bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 rounded-md shadow-sm"
+                        className={`mt-1 ${inputClasses}`}
                     />
                 </div>
                  <div>
-                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Due Date</label>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Due Date</label>
                     <input
                         type="date"
                         value={editedAssignment.dueDate}
                         onChange={(e) => setEditedAssignment(prev => prev ? { ...prev, dueDate: e.target.value } : null)}
-                        className="mt-1 block w-full px-3 py-2 bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 rounded-md shadow-sm"
+                        className={`mt-1 ${inputClasses}`}
                     />
                 </div>
             </div>
@@ -765,11 +959,11 @@ const AssignmentGradingModal: React.FC<{
                          <ul className="space-y-1">
                             {assignment.submittedFiles.map(file => (
                                 <li key={file.name}>
-                                    <a href={file.url} target="_blank" rel="noopener noreferrer" className="text-primary-600 dark:text-primary-400 hover:underline">{file.name}</a>
+                                    <a href={file.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">{file.name}</a>
                                 </li>
                             ))}
                         </ul>
-                    ) : <p className="text-sm text-zinc-500">No files were submitted.</p>}
+                    ) : <p className="text-sm text-slate-500">No files were submitted.</p>}
                 </div>
                  <div>
                     <label className="block text-sm font-medium">Grade</label>
@@ -778,7 +972,7 @@ const AssignmentGradingModal: React.FC<{
                         value={grade}
                         onChange={(e) => setGrade(e.target.value)}
                         placeholder="e.g., A+, B-, 85%"
-                        className="mt-1 block w-full p-2 border rounded-md bg-white dark:bg-zinc-700 border-zinc-300 dark:border-zinc-600"
+                        className={`mt-1 ${inputClasses}`}
                     />
                 </div>
                 <div>
@@ -786,7 +980,7 @@ const AssignmentGradingModal: React.FC<{
                      <input
                         type="file"
                         onChange={(e) => setGradedFile(e.target.files?.[0])}
-                        className="mt-1 block w-full text-sm text-zinc-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
+                        className="mt-1 block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                     />
                 </div>
             </div>
@@ -801,13 +995,17 @@ const AssignmentView: React.FC<{
     setAssignments: React.Dispatch<React.SetStateAction<Assignment[]>>;
     notifications: Notification[];
     setNotifications: React.Dispatch<React.SetStateAction<Notification[]>>;
-}> = ({ user, selectedClassId, assignments, setAssignments, notifications, setNotifications }) => {
+    allUsers: User[];
+    classMemberships: ClassMembership[];
+    classes: Class[];
+}> = ({ user, selectedClassId, assignments, setAssignments, notifications, setNotifications, allUsers, classMemberships, classes }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState<'All' | 'Pending' | 'Submitted' | 'Graded'>('All');
     const [submissionFilter, setSubmissionFilter] = useState<'All' | 'With Submission' | 'No Submission'>('All');
     const [isNewAssignmentModalOpen, setIsNewAssignmentModalOpen] = useState(false);
     const [newAssignmentSubject, setNewAssignmentSubject] = useState('');
     const [newAssignmentDueDate, setNewAssignmentDueDate] = useState('');
+    const [newAssignmentStudentIds, setNewAssignmentStudentIds] = useState<string[]>([]);
     const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(null);
     const [viewingAssignment, setViewingAssignment] = useState<Assignment | null>(null);
     const [uploadingAssignment, setUploadingAssignment] = useState<Assignment | null>(null);
@@ -816,6 +1014,16 @@ const AssignmentView: React.FC<{
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const studentId = user.role === Role.PARENT ? user.studentId : user.id;
+    
+    const studentsInClass = useMemo(() => {
+        if (!selectedClassId || selectedClassId === 'ALL') return [];
+        
+        const studentIdsInClass = classMemberships
+            .filter(cm => cm.classId === selectedClassId && cm.role === Role.STUDENT)
+            .map(cm => cm.userId);
+            
+        return allUsers.filter(u => studentIdsInClass.includes(u.id));
+    }, [selectedClassId, classMemberships, allUsers]);
 
     // Send reminders for assignments due in 2 days
     useEffect(() => {
@@ -866,17 +1074,30 @@ const AssignmentView: React.FC<{
                          (user.role === Role.STAFF && MOCK_USERS.find(u => u.id === a.studentId)?.name.toLowerCase().includes(searchTerm.toLowerCase())));
     }, [assignments, selectedClassId, user.role, studentId, searchTerm, statusFilter, submissionFilter]);
 
+    const handleCloseNewAssignmentModal = () => {
+        setIsNewAssignmentModalOpen(false);
+        setNewAssignmentSubject('');
+        setNewAssignmentDueDate('');
+        setNewAssignmentStudentIds([]);
+    };
+    
+    const handleOpenNewAssignmentModal = () => {
+        setNewAssignmentStudentIds(studentsInClass.map(s => s.id));
+        setIsNewAssignmentModalOpen(true);
+    };
+
     const handleCreateAssignment = () => {
         if (!newAssignmentSubject || !newAssignmentDueDate || !selectedClassId || selectedClassId === 'ALL') {
             alert("Please select a specific class and fill all fields.");
             return;
         }
 
-        const classStudents = MOCK_CLASS_MEMBERSHIPS
-            .filter(cm => cm.classId === selectedClassId && cm.role === Role.STUDENT)
-            .map(cm => cm.userId);
+        if (newAssignmentStudentIds.length === 0) {
+            alert("Please select at least one student to assign the assignment to.");
+            return;
+        }
         
-        const newAssignments: Assignment[] = classStudents.map(studentId => ({
+        const newAssignments: Assignment[] = newAssignmentStudentIds.map(studentId => ({
             id: `AS${Date.now()}${Math.random()}`,
             studentId,
             classId: selectedClassId,
@@ -886,9 +1107,7 @@ const AssignmentView: React.FC<{
         }));
 
         setAssignments(prev => [...prev, ...newAssignments]);
-        setIsNewAssignmentModalOpen(false);
-        setNewAssignmentSubject('');
-        setNewAssignmentDueDate('');
+        handleCloseNewAssignmentModal();
     };
     
     const handleUpdateAssignment = (updatedAssignment: Assignment) => {
@@ -953,8 +1172,8 @@ const AssignmentView: React.FC<{
             onClick={() => setStatusFilter(status)}
             className={`px-3 py-1.5 text-sm font-medium rounded-md ${
                 statusFilter === status
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-white dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-600'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600'
             }`}
         >
             {status}
@@ -966,8 +1185,8 @@ const AssignmentView: React.FC<{
             onClick={() => setSubmissionFilter(filter)}
             className={`px-3 py-1.5 text-sm font-medium rounded-md ${
                 submissionFilter === filter
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-white dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-600'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600'
             }`}
         >
             {filter}
@@ -980,8 +1199,8 @@ const AssignmentView: React.FC<{
                 <h2 className="text-xl font-semibold">Assignments</h2>
                 <div className="flex flex-col md:flex-row gap-4">
                     <div className="flex items-center gap-3">
-                        <span className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Status:</span>
-                        <div className="flex items-center gap-1 p-1 bg-zinc-100 dark:bg-zinc-800 rounded-lg">
+                        <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Status:</span>
+                        <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
                             <StatusButton status="All" />
                             <StatusButton status="Pending" />
                             <StatusButton status="Submitted" />
@@ -989,8 +1208,8 @@ const AssignmentView: React.FC<{
                         </div>
                     </div>
                     <div className="flex items-center gap-3">
-                        <span className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Submission:</span>
-                        <div className="flex items-center gap-1 p-1 bg-zinc-100 dark:bg-zinc-800 rounded-lg">
+                        <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Submission:</span>
+                        <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
                             <SubmissionFilterButton filter="All" />
                             <SubmissionFilterButton filter="With Submission" />
                             <SubmissionFilterButton filter="No Submission" />
@@ -1005,19 +1224,19 @@ const AssignmentView: React.FC<{
                         placeholder="Search assignments..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10 pr-4 py-2 w-full md:w-80 border rounded-lg bg-white dark:bg-zinc-700 border-zinc-300 dark:border-zinc-600"
+                        className={`${searchInputClasses} md:w-80`}
                     />
-                    <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400" />
+                    <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                 </div>
                 {user.role === Role.STAFF && (
-                    <Button onClick={() => setIsNewAssignmentModalOpen(true)} disabled={!selectedClassId || selectedClassId === 'ALL'}>
+                    <Button onClick={handleOpenNewAssignmentModal} disabled={!selectedClassId || selectedClassId === 'ALL'}>
                         New Assignment
                     </Button>
                 )}
             </div>
             <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left">
-                    <thead className="bg-zinc-50 dark:bg-zinc-700/50 text-zinc-600 dark:text-zinc-400">
+                    <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-400">
                         <tr>
                             {user.role === Role.STAFF && <th className="px-4 py-2">Student</th>}
                             <th className="px-4 py-2">Subject</th>
@@ -1030,7 +1249,7 @@ const AssignmentView: React.FC<{
                     </thead>
                     <tbody>
                         {filteredAssignments.map(asg => (
-                            <tr key={asg.id} className="border-b dark:border-white/10">
+                            <tr key={asg.id} className="border-b dark:border-slate-700">
                                 {user.role === Role.STAFF && <td className="px-4 py-2">{MOCK_USERS.find(u => u.id === asg.studentId)?.name}</td>}
                                 <td className="px-4 py-2 font-medium">{asg.subject}</td>
                                 <td className="px-4 py-2">{asg.dueDate}</td>
@@ -1039,23 +1258,23 @@ const AssignmentView: React.FC<{
                                 <td className="px-4 py-2">{asg.grade || '—'}</td>
                                 <td className="px-4 py-2">
                                     <div className="flex justify-center items-center gap-2">
-                                        <button onClick={() => setViewingAssignment(asg)} className="p-1.5 text-zinc-500 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-700" aria-label="View Details">
+                                        <button onClick={() => setViewingAssignment(asg)} className="p-1.5 text-slate-500 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700" aria-label="View Details">
                                             <EyeIcon className="w-5 h-5" />
                                         </button>
                                         {user.role === Role.STAFF && (
                                             <>
-                                            <button onClick={() => setEditingAssignment(asg)} className="p-1.5 text-zinc-500 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-700" aria-label="Edit Assignment">
+                                            <button onClick={() => setEditingAssignment(asg)} className="p-1.5 text-slate-500 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700" aria-label="Edit Assignment">
                                                 <EditIcon className="w-5 h-5" />
                                             </button>
                                             {asg.status === 'Submitted' && (
-                                                <button onClick={() => setGradingAssignment(asg)} className="p-1.5 text-zinc-500 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-700" aria-label="Grade Assignment">
+                                                <button onClick={() => setGradingAssignment(asg)} className="p-1.5 text-slate-500 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700" aria-label="Grade Assignment">
                                                     <GraduationCapIcon className="w-5 h-5" />
                                                 </button>
                                             )}
                                             </>
                                         )}
                                         {asg.status === 'Pending' && user.role === Role.STUDENT && (
-                                            <button onClick={() => handleUploadClick(asg)} className="p-1.5 text-zinc-500 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-700" aria-label="Upload Files">
+                                            <button onClick={() => handleUploadClick(asg)} className="p-1.5 text-slate-500 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700" aria-label="Upload Files">
                                                 <UploadIcon className="w-5 h-5" />
                                             </button>
                                         )}
@@ -1102,24 +1321,24 @@ const AssignmentView: React.FC<{
                         />
                         <button 
                             onClick={() => fileInputRef.current?.click()}
-                            className="w-full flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-lg border-zinc-300 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 transition-colors"
+                            className="w-full flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-lg border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
                         >
-                            <UploadIcon className="w-10 h-10 text-zinc-400 mb-2"/>
+                            <UploadIcon className="w-10 h-10 text-slate-400 mb-2"/>
                             <span className="text-sm font-semibold">Click to browse or drag files here</span>
-                            <span className="text-xs text-zinc-500">Multiple files are allowed</span>
+                            <span className="text-xs text-slate-500">Multiple files are allowed</span>
                         </button>
                     </div>
                     {selectedFiles.length > 0 && (
                         <div>
                             <h4 className="font-semibold mb-2">Selected Files:</h4>
-                            <ul className="space-y-2 max-h-48 overflow-y-auto p-2 bg-zinc-50 dark:bg-zinc-900/50 rounded-md">
+                            <ul className="space-y-2 max-h-48 overflow-y-auto p-2 bg-slate-50 dark:bg-slate-900/50 rounded-md">
                                 {selectedFiles.map(file => (
-                                    <li key={file.name} className="flex justify-between items-center p-2 rounded-md bg-white dark:bg-zinc-700 shadow-sm">
+                                    <li key={file.name} className="flex justify-between items-center p-2 rounded-md bg-white dark:bg-slate-700 shadow-sm">
                                         <div>
                                             <p className="text-sm font-medium">{file.name}</p>
-                                            <p className="text-xs text-zinc-500">{(file.size / 1024).toFixed(2)} KB</p>
+                                            <p className="text-xs text-slate-500">{(file.size / 1024).toFixed(2)} KB</p>
                                         </div>
-                                        <button onClick={() => handleRemoveFile(file.name)} className="p-1 text-red-500 rounded-full hover:bg-red-100 dark:hover:bg-red-900/50">
+                                        <button onClick={() => handleRemoveFile(file.name)} className="p-1 text-red-500 rounded-full hover:bg-red-100 dark:hover:bg-red-500/20">
                                             <TrashIcon className="w-4 h-4" />
                                         </button>
                                     </li>
@@ -1132,21 +1351,68 @@ const AssignmentView: React.FC<{
 
             <Modal
                 isOpen={isNewAssignmentModalOpen}
-                onClose={() => setIsNewAssignmentModalOpen(false)}
+                onClose={handleCloseNewAssignmentModal}
                 title="Create New Assignment"
-                footer={<><Button variant="secondary" onClick={() => setIsNewAssignmentModalOpen(false)}>Cancel</Button><Button onClick={handleCreateAssignment}>Create</Button></>}
+                footer={<><Button variant="secondary" onClick={handleCloseNewAssignmentModal}>Cancel</Button><Button onClick={handleCreateAssignment} disabled={newAssignmentStudentIds.length === 0}>Create Assignment</Button></>}
             >
-                <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-4">
-                    This assignment will be created for all students in the selected class: <strong>{MOCK_CLASSES.find(c => c.id === selectedClassId)?.name || 'N/A'}</strong>.
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+                    Create a new assignment for students in <strong>{classes.find(c => c.id === selectedClassId)?.name || 'N/A'}</strong>.
                 </p>
                 <div className="space-y-4">
                     <div>
                         <label className="block text-sm font-medium">Subject</label>
-                        <input type="text" value={newAssignmentSubject} onChange={e => setNewAssignmentSubject(e.target.value)} className="mt-1 block w-full p-2 border rounded-md bg-white dark:bg-zinc-700 border-zinc-300 dark:border-zinc-600" />
+                        <input type="text" value={newAssignmentSubject} onChange={e => setNewAssignmentSubject(e.target.value)} className={`mt-1 ${inputClasses}`} />
                     </div>
                     <div>
                         <label className="block text-sm font-medium">Due Date</label>
-                        <input type="date" value={newAssignmentDueDate} onChange={e => setNewAssignmentDueDate(e.target.value)} className="mt-1 block w-full p-2 border rounded-md bg-white dark:bg-zinc-700 border-zinc-300 dark:border-zinc-600" />
+                        <input type="date" value={newAssignmentDueDate} onChange={e => setNewAssignmentDueDate(e.target.value)} className={`mt-1 ${inputClasses}`} />
+                    </div>
+                     <div>
+                        <label className="block text-sm font-medium">Assign to Students</label>
+                        <div className="mt-2 border rounded-md max-h-60 overflow-y-auto bg-white dark:bg-slate-900/50 border-slate-300 dark:border-slate-600">
+                            <div className="p-2 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50 sticky top-0">
+                                <label className="flex items-center gap-3 px-2">
+                                    <input
+                                        type="checkbox"
+                                        checked={studentsInClass.length > 0 && newAssignmentStudentIds.length === studentsInClass.length}
+                                        onChange={(e) => {
+                                            if (e.target.checked) {
+                                                setNewAssignmentStudentIds(studentsInClass.map(s => s.id));
+                                            } else {
+                                                setNewAssignmentStudentIds([]);
+                                            }
+                                        }}
+                                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                    />
+                                    <span className="font-medium">Select All ({newAssignmentStudentIds.length}/{studentsInClass.length})</span>
+                                </label>
+                            </div>
+                            <ul className="divide-y divide-slate-200 dark:divide-slate-700">
+                                {studentsInClass.map(student => (
+                                    <li key={student.id}>
+                                        <label className="flex items-center gap-3 p-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                                            <input
+                                                type="checkbox"
+                                                checked={newAssignmentStudentIds.includes(student.id)}
+                                                onChange={() => {
+                                                    setNewAssignmentStudentIds(prev =>
+                                                        prev.includes(student.id)
+                                                            ? prev.filter(id => id !== student.id)
+                                                            : [...prev, student.id]
+                                                    );
+                                                }}
+                                                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                            />
+                                            <ProfilePicture user={student} size="sm" />
+                                            <div>
+                                                <p className="font-medium text-slate-900 dark:text-slate-100">{student.name}</p>
+                                                <p className="text-sm text-slate-500 dark:text-slate-400">{student.rollNo}</p>
+                                            </div>
+                                        </label>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
                     </div>
                 </div>
             </Modal>
@@ -1154,22 +1420,87 @@ const AssignmentView: React.FC<{
     );
 };
 
-const AttendanceView: React.FC<{ user: User, selectedClassId: string | null }> = ({ user, selectedClassId }) => {
+const AttendanceView: React.FC<{
+    user: User;
+    selectedClassId: string | null;
+    attendance: Attendance[];
+    classMemberships: ClassMembership[];
+    allUsers: User[];
+    onMarkAttendance: (classId: string, date: string, subject: string, studentStatuses: Map<string, AttendanceStatus>) => void;
+}> = ({ user, selectedClassId, attendance, classMemberships, allUsers, onMarkAttendance }) => {
     const studentId = user.role === Role.PARENT ? user.studentId : user.id;
 
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
+    const [attendanceSubject, setAttendanceSubject] = useState('');
+    const [studentStatuses, setStudentStatuses] = useState<Map<string, AttendanceStatus>>(new Map());
+
+    const studentsInClass = useMemo(() => {
+        if (!selectedClassId) return [];
+        const studentIds = classMemberships
+            .filter(cm => cm.classId === selectedClassId && cm.role === Role.STUDENT)
+            .map(cm => cm.userId);
+        return allUsers.filter(u => studentIds.includes(u.id)).sort((a,b) => a.name.localeCompare(b.name));
+    }, [selectedClassId, classMemberships, allUsers]);
+
+    useEffect(() => {
+        if (isModalOpen && selectedClassId) {
+            const newStatuses = new Map<string, AttendanceStatus>();
+            const existingRecords = attendance.filter(a =>
+                a.classId === selectedClassId &&
+                a.date === attendanceDate &&
+                a.subject.toLowerCase() === attendanceSubject.toLowerCase()
+            );
+
+            studentsInClass.forEach(student => {
+                const record = existingRecords.find(r => r.studentId === student.id);
+                newStatuses.set(student.id, record ? record.status : AttendanceStatus.PRESENT);
+            });
+            setStudentStatuses(newStatuses);
+        }
+    }, [isModalOpen, attendanceDate, attendanceSubject, selectedClassId, studentsInClass, attendance]);
+
+    const handleStatusChange = (studentId: string, status: AttendanceStatus) => {
+        setStudentStatuses(new Map(studentStatuses.set(studentId, status)));
+    };
+
+    const handleMarkAll = (status: AttendanceStatus) => {
+        const newStatuses = new Map<string, AttendanceStatus>();
+        studentsInClass.forEach(student => {
+            newStatuses.set(student.id, status);
+        });
+        setStudentStatuses(newStatuses);
+    };
+
+    const handleSaveAttendance = () => {
+        if (!selectedClassId || !attendanceSubject.trim()) {
+            alert("Please enter a subject.");
+            return;
+        }
+        onMarkAttendance(selectedClassId, attendanceDate, attendanceSubject.trim(), studentStatuses);
+        setIsModalOpen(false);
+    };
+
     const filteredAttendance = useMemo(() => {
-        return MOCK_ATTENDANCE
+        return attendance
             .filter(a => selectedClassId === 'ALL' || a.classId === selectedClassId)
             .filter(a => user.role === Role.STAFF || a.studentId === studentId)
             .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    }, [selectedClassId, user.role, studentId]);
+    }, [attendance, selectedClassId, user.role, studentId]);
 
     return (
         <Card className="animate-scaleIn">
-            <h2 className="text-xl font-semibold mb-4">Attendance Records</h2>
+            <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold">Attendance Records</h2>
+                {user.role === Role.STAFF && (
+                    <Button onClick={() => setIsModalOpen(true)} disabled={!selectedClassId || selectedClassId === 'ALL'}>
+                        Mark Attendance
+                    </Button>
+                )}
+            </div>
             <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left">
-                    <thead className="bg-zinc-50 dark:bg-zinc-700/50 text-zinc-600 dark:text-zinc-400">
+                    <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-400">
                         <tr>
                             {user.role === Role.STAFF && <th className="px-4 py-2">Student</th>}
                             <th className="px-4 py-2">Date</th>
@@ -1179,12 +1510,12 @@ const AttendanceView: React.FC<{ user: User, selectedClassId: string | null }> =
                     </thead>
                     <tbody>
                         {filteredAttendance.map(att => (
-                            <tr key={att.id} className="border-b dark:border-white/10">
+                            <tr key={att.id} className="border-b dark:border-slate-700">
                                 {user.role === Role.STAFF && <td className="px-4 py-2">{MOCK_USERS.find(u => u.id === att.studentId)?.name}</td>}
                                 <td className="px-4 py-2">{att.date}</td>
                                 <td className="px-4 py-2">{att.subject}</td>
                                 <td className="px-4 py-2">
-                                    <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${att.status === 'P' ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300' : 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300'}`}>
+                                    <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${att.status === 'P' ? 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400'}`}>
                                         {att.status === 'P' ? 'Present' : 'Absent'}
                                     </span>
                                 </td>
@@ -1193,6 +1524,44 @@ const AttendanceView: React.FC<{ user: User, selectedClassId: string | null }> =
                     </tbody>
                 </table>
             </div>
+
+            <Modal
+                isOpen={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
+                title="Mark Attendance"
+                footer={<><Button variant="secondary" onClick={() => setIsModalOpen(false)}>Cancel</Button><Button onClick={handleSaveAttendance}>Save Attendance</Button></>}
+            >
+                <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium">Date</label>
+                            <input type="date" value={attendanceDate} onChange={e => setAttendanceDate(e.target.value)} className={`mt-1 ${inputClasses}`} />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium">Subject / Period</label>
+                            <input type="text" value={attendanceSubject} onChange={e => setAttendanceSubject(e.target.value)} placeholder="e.g., Physics" className={`mt-1 ${inputClasses}`} />
+                        </div>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                        <Button variant="secondary" size="sm" onClick={() => handleMarkAll(AttendanceStatus.PRESENT)}>Mark All Present</Button>
+                        <Button variant="secondary" size="sm" onClick={() => handleMarkAll(AttendanceStatus.ABSENT)}>Mark All Absent</Button>
+                    </div>
+                    <ul className="space-y-2 max-h-80 overflow-y-auto p-2 border rounded-md bg-slate-50 dark:bg-slate-900/50">
+                        {studentsInClass.map(student => (
+                            <li key={student.id} className="flex justify-between items-center p-2 rounded-md bg-white dark:bg-slate-800 shadow-sm">
+                                <div className="flex items-center gap-3">
+                                    <ProfilePicture user={student} size="sm" />
+                                    <span>{student.name}</span>
+                                </div>
+                                <div className="flex gap-1">
+                                    <button onClick={() => handleStatusChange(student.id, AttendanceStatus.PRESENT)} className={`px-3 py-1 text-sm rounded-md ${studentStatuses.get(student.id) === AttendanceStatus.PRESENT ? 'bg-green-500 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}>P</button>
+                                    <button onClick={() => handleStatusChange(student.id, AttendanceStatus.ABSENT)} className={`px-3 py-1 text-sm rounded-md ${studentStatuses.get(student.id) === AttendanceStatus.ABSENT ? 'bg-red-500 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}>A</button>
+                                </div>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            </Modal>
         </Card>
     );
 };
@@ -1236,7 +1605,7 @@ const FeedbackView: React.FC<{ user: User }> = ({ user }) => {
                      <select 
                         value={selectedStaff} 
                         onChange={e => setSelectedStaff(e.target.value)}
-                        className="w-full p-2 border rounded-md bg-white dark:bg-zinc-700 border-zinc-300 dark:border-zinc-600"
+                        className={inputClasses}
                     >
                         <option value="" disabled>Select Staff Member</option>
                         {allStaff.map(staff => <option key={staff.id} value={staff.id}>{staff.name} - {staff.designation}</option>)}
@@ -1246,7 +1615,7 @@ const FeedbackView: React.FC<{ user: User }> = ({ user }) => {
                         placeholder="Share your thoughts..."
                         value={newFeedback}
                         onChange={e => setNewFeedback(e.target.value)}
-                        className="w-full p-2 border rounded-md bg-white dark:bg-zinc-700 border-zinc-300 dark:border-zinc-600"
+                        className={inputClasses}
                     />
                     <div className="text-right">
                         <Button onClick={handleFeedbackSubmit} disabled={!newFeedback || !selectedStaff}>Submit</Button>
@@ -1259,14 +1628,14 @@ const FeedbackView: React.FC<{ user: User }> = ({ user }) => {
             <h3 className="text-lg font-semibold mb-4">Feedback History</h3>
             <div className="space-y-4">
                 {userFeedback.length > 0 ? userFeedback.map(fb => (
-                     <div key={fb.id} className="p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg">
-                        <p className="text-zinc-700 dark:text-zinc-300">{fb.comments}</p>
-                        <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-2">
+                     <div key={fb.id} className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+                        <p className="text-slate-700 dark:text-slate-300">{fb.comments}</p>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
                             To: <strong>{fb.staffName}</strong> on {fb.createdDate}
                         </p>
                     </div>
                 )) : (
-                    <p className="text-zinc-500 dark:text-zinc-400">No feedback history.</p>
+                    <p className="text-slate-500 dark:text-slate-400">No feedback history.</p>
                 )}
             </div>
         </Card>
@@ -1310,12 +1679,12 @@ const MessagesView: React.FC<{ user: User; selectedClassId: string | null; class
      const ReplyPreview: React.FC<{ message: Message; onCancel: () => void }> = ({ message, onCancel }) => {
         const sender = users.find(u => u.id === message.senderId);
         return (
-            <div className="p-2 bg-zinc-100 dark:bg-zinc-700 rounded-t-lg border-b dark:border-zinc-600 flex justify-between items-center animate-fadeIn">
+            <div className="p-2 bg-slate-100 dark:bg-slate-700 rounded-t-lg border-b dark:border-slate-600 flex justify-between items-center animate-fadeIn">
                 <div>
-                    <p className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">Replying to {sender?.name}</p>
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400 truncate">"{message.content}"</p>
+                    <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">Replying to {sender?.name}</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 truncate">"{message.content}"</p>
                 </div>
-                <button onClick={onCancel} className="p-1 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-600">
+                <button onClick={onCancel} className="p-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-600">
                     <CloseIcon className="w-4 h-4" />
                 </button>
             </div>
@@ -1331,27 +1700,27 @@ const MessagesView: React.FC<{ user: User; selectedClassId: string | null; class
         const [showReplyButton, setShowReplyButton] = useState(false);
 
         return (
-            <div className={`flex items-start gap-3 w-full animate-slideInUp ${level > 0 ? 'mt-3 pl-6 border-l-2 border-zinc-200 dark:border-zinc-700' : ''}`}
+            <div className={`flex items-start gap-3 w-full animate-slideInUp ${level > 0 ? 'mt-3 pl-6 border-l-2 border-slate-200 dark:border-slate-700' : ''}`}
                  onMouseEnter={() => setShowReplyButton(true)} onMouseLeave={() => setShowReplyButton(false)}>
-                <img src={`https://i.pravatar.cc/40?u=${sender?.id}`} alt={sender?.name} className="w-10 h-10 rounded-full flex-shrink-0" />
+                <ProfilePicture user={sender} size="md" className="flex-shrink-0" />
                 <div className="flex-1">
-                    <div className="bg-white dark:bg-zinc-800/60 rounded-lg p-3">
+                    <div className="bg-white dark:bg-slate-800/60 rounded-lg p-3">
                         <div className="flex justify-between items-center">
-                            <p className="font-semibold text-zinc-800 dark:text-zinc-200">{sender?.name}</p>
-                            <p className="text-xs text-zinc-400 dark:text-zinc-500">{new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                            <p className="font-semibold text-slate-900 dark:text-slate-100">{sender?.name}</p>
+                            <p className="text-xs text-slate-400 dark:text-slate-500">{new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                         </div>
                          {parentMessage && parentSender && (
-                            <a href={`#message-${parentMessage.id}`} className="mt-2 p-2 block border-l-2 border-zinc-200 dark:border-zinc-600 bg-zinc-50 dark:bg-zinc-700/50 rounded-r-md hover:bg-zinc-100 dark:hover:bg-zinc-600">
-                                <p className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">Replying to {parentSender.name}</p>
-                                <p className="text-sm text-zinc-500 dark:text-zinc-400 truncate">"{parentMessage.content}"</p>
+                            <a href={`#message-${parentMessage.id}`} className="mt-2 p-2 block border-l-2 border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/50 rounded-r-md hover:bg-slate-100 dark:hover:bg-slate-600">
+                                <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">Replying to {parentSender.name}</p>
+                                <p className="text-sm text-slate-500 dark:text-slate-400 truncate">"{parentMessage.content}"</p>
                             </a>
                         )}
-                        <p className="mt-2 text-zinc-600 dark:text-zinc-300 whitespace-pre-wrap">{message.content}</p>
+                        <p className="mt-2 text-slate-600 dark:text-slate-300 whitespace-pre-wrap">{message.content}</p>
                     </div>
                 </div>
                  <div className="w-10 flex-shrink-0">
                     {showReplyButton && (
-                        <button onClick={() => onReply(message)} className="p-2 text-zinc-400 hover:text-primary-600 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-700">
+                        <button onClick={() => onReply(message)} className="p-2 text-slate-400 hover:text-blue-600 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700">
                             <ReplyIcon className="w-4 h-4" />
                         </button>
                     )}
@@ -1378,7 +1747,7 @@ const MessagesView: React.FC<{ user: User; selectedClassId: string | null; class
                         </div>
                     ))}
                 </div>
-                <div className="p-4 border-t dark:border-white/10 bg-zinc-50 dark:bg-zinc-800/50">
+                <div className="p-4 border-t dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
                     {replyingTo && <ReplyPreview message={replyingTo} onCancel={() => setReplyingTo(null)} />}
                     <div className="flex items-center gap-2">
                         <textarea
@@ -1387,7 +1756,7 @@ const MessagesView: React.FC<{ user: User; selectedClassId: string | null; class
                             onChange={e => setNewMessage(e.target.value)}
                             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
                             placeholder="Type a message..."
-                            className={`flex-1 p-2 border rounded-lg bg-white dark:bg-zinc-700 border-zinc-300 dark:border-zinc-600 resize-none ${replyingTo ? 'rounded-t-none' : ''}`}
+                            className={`flex-1 p-2 border rounded-lg bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 resize-none focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-offset-slate-900 ${replyingTo ? 'rounded-t-none' : ''}`}
                         />
                         <Button onClick={handleSendMessage} className="!p-2">
                             <SendIcon className="w-6 h-6" />
@@ -1399,8 +1768,7 @@ const MessagesView: React.FC<{ user: User; selectedClassId: string | null; class
     );
 };
 
-const AnnouncementsView: React.FC<{ user: User, selectedClassId: string | null, classes: Class[] }> = ({ user, selectedClassId, classes }) => {
-    const [announcements, setAnnouncements] = useState<Announcement[]>(MOCK_ANNOUNCEMENTS);
+const AnnouncementsView: React.FC<{ user: User, selectedClassId: string | null, classes: Class[], announcements: Announcement[], setAnnouncements: React.Dispatch<React.SetStateAction<Announcement[]>> }> = ({ user, selectedClassId, classes, announcements, setAnnouncements }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [newTitle, setNewTitle] = useState('');
     const [newContent, setNewContent] = useState('');
@@ -1450,15 +1818,15 @@ const AnnouncementsView: React.FC<{ user: User, selectedClassId: string | null, 
                     <Card key={ann.id} className="animate-slideInUp" style={{ animationDelay: `${index * 75}ms` }}>
                         <div className="flex justify-between items-start">
                              <div>
-                                <h3 className="text-xl font-semibold text-zinc-800 dark:text-zinc-200">{ann.title}</h3>
-                                {ann.classId && <p className="text-sm font-medium text-primary-600 dark:text-primary-400">{classes.find(c => c.id === ann.classId)?.name}</p>}
+                                <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{ann.title}</h3>
+                                {ann.classId && <p className="text-sm font-medium text-blue-600 dark:text-blue-400">{classes.find(c => c.id === ann.classId)?.name}</p>}
                             </div>
-                             <div className="text-right text-xs text-zinc-500 dark:text-zinc-400 flex-shrink-0 ml-4">
+                             <div className="text-right text-xs text-slate-500 dark:text-slate-400 flex-shrink-0 ml-4">
                                 <p>By {ann.staffName}</p>
                                 <p>{new Date(ann.timestamp).toLocaleString()}</p>
                             </div>
                         </div>
-                        <p className="mt-4 text-zinc-600 dark:text-zinc-300">{ann.content}</p>
+                        <p className="mt-4 text-slate-600 dark:text-slate-300">{ann.content}</p>
                     </Card>
                 ))}
             </div>
@@ -1472,15 +1840,15 @@ const AnnouncementsView: React.FC<{ user: User, selectedClassId: string | null, 
                 <div className="space-y-4">
                     <div>
                         <label className="block text-sm font-medium">Title</label>
-                        <input type="text" value={newTitle} onChange={e => setNewTitle(e.target.value)} className="mt-1 block w-full p-2 border rounded-md bg-white dark:bg-zinc-700 border-zinc-300 dark:border-zinc-600" />
+                        <input type="text" value={newTitle} onChange={e => setNewTitle(e.target.value)} className={`mt-1 ${inputClasses}`} />
                     </div>
                      <div>
                         <label className="block text-sm font-medium">Content</label>
-                        <textarea rows={5} value={newContent} onChange={e => setNewContent(e.target.value)} className="mt-1 block w-full p-2 border rounded-md bg-white dark:bg-zinc-700 border-zinc-300 dark:border-zinc-600" />
+                        <textarea rows={5} value={newContent} onChange={e => setNewContent(e.target.value)} className={`mt-1 ${inputClasses}`} />
                     </div>
                     <div>
                         <label className="block text-sm font-medium">Audience</label>
-                         <select value={newAudience} onChange={e => setNewAudience(e.target.value as any)} className="mt-1 block w-full p-2 border rounded-md bg-white dark:bg-zinc-700 border-zinc-300 dark:border-zinc-600">
+                         <select value={newAudience} onChange={e => setNewAudience(e.target.value as any)} className={`mt-1 ${inputClasses}`}>
                             <option value="STUDENT">Students</option>
                             <option value="PARENT">Parents</option>
                             <option value="ALL">All</option>
@@ -1497,7 +1865,7 @@ const AnnouncementsView: React.FC<{ user: User, selectedClassId: string | null, 
     );
 };
 
-const StudentProfilesView: React.FC<{ user: User, allUsers: User[], onUpdateUser: (user:User) => void }> = ({ user, allUsers, onUpdateUser }) => {
+const StudentProfilesView: React.FC<{ user: User, allUsers: User[], onUpdateUser: (user:User) => void, onDutyRequests: OnDutyRequest[], leaveRequests: LeaveRequest[] }> = ({ user, allUsers, onUpdateUser, onDutyRequests, leaveRequests }) => {
     const [selectedStudent, setSelectedStudent] = useState<User | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
@@ -1525,18 +1893,18 @@ const StudentProfilesView: React.FC<{ user: User, allUsers: User[], onUpdateUser
     }, [allUsers, debouncedSearchTerm]);
     
     if (user.role === Role.STUDENT) {
-        return <StudentProfileDetail student={user} onBack={() => {}} onUpdateUser={onUpdateUser} currentUser={user} />;
+        return <StudentProfileDetail student={user} onBack={() => {}} onUpdateUser={onUpdateUser} currentUser={user} onDutyRequests={onDutyRequests} leaveRequests={leaveRequests} />;
     }
      if (user.role === Role.PARENT) {
         const child = allUsers.find(u => u.id === user.studentId);
         if (child) {
-            return <StudentProfileDetail student={child} onBack={() => {}} onUpdateUser={onUpdateUser} currentUser={user} />;
+            return <StudentProfileDetail student={child} onBack={() => {}} onUpdateUser={onUpdateUser} currentUser={user} onDutyRequests={onDutyRequests} leaveRequests={leaveRequests} />;
         }
         return <Card><p>Could not find student profile.</p></Card>;
     }
     
     if (selectedStudent) {
-        return <StudentProfileDetail student={selectedStudent} onBack={() => setSelectedStudent(null)} onUpdateUser={onUpdateUser} currentUser={user} />;
+        return <StudentProfileDetail student={selectedStudent} onBack={() => setSelectedStudent(null)} onUpdateUser={onUpdateUser} currentUser={user} onDutyRequests={onDutyRequests} leaveRequests={leaveRequests} />;
     }
 
     return (
@@ -1548,24 +1916,24 @@ const StudentProfilesView: React.FC<{ user: User, allUsers: User[], onUpdateUser
                     placeholder="Search students by name or roll number..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 pr-4 py-2 w-full border rounded-lg bg-white dark:bg-zinc-700 border-zinc-300 dark:border-zinc-600"
+                    className={searchInputClasses}
                 />
-                <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400" />
+                <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {students.length > 0 ? (
                     students.map(student => (
-                        <div key={student.id} onClick={() => setSelectedStudent(student)} className="p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg flex items-center gap-4 cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-700/50 transition-all duration-200 hover:shadow-lg hover:scale-105">
-                            <img src={`https://i.pravatar.cc/40?u=${student.id}`} alt={student.name} className="w-12 h-12 rounded-full" />
+                        <div key={student.id} onClick={() => setSelectedStudent(student)} className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg flex items-center gap-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-all duration-200 hover:shadow-lg hover:scale-105">
+                            <ProfilePicture user={student} size="lg" />
                             <div>
                                 <p className="font-semibold">{student.name}</p>
-                                <p className="text-sm text-zinc-500 dark:text-zinc-400">{student.rollNo}</p>
+                                <p className="text-sm text-slate-500 dark:text-slate-400">{student.rollNo}</p>
                             </div>
                         </div>
                     ))
                 ) : (
                     <div className="col-span-full text-center py-10">
-                        <p className="text-zinc-500 dark:text-zinc-400">No students found matching your search.</p>
+                        <p className="text-slate-500 dark:text-slate-400">No students found matching your search.</p>
                     </div>
                 )}
             </div>
@@ -1573,7 +1941,7 @@ const StudentProfilesView: React.FC<{ user: User, allUsers: User[], onUpdateUser
     );
 };
 
-const StudentProfileDetail: React.FC<{ student: User; onBack: () => void, onUpdateUser: (user: User) => void, currentUser: User }> = ({ student, onBack, onUpdateUser, currentUser }) => {
+const StudentProfileDetail: React.FC<{ student: User; onBack: () => void, onUpdateUser: (user: User) => void, currentUser: User, onDutyRequests: OnDutyRequest[], leaveRequests: LeaveRequest[] }> = ({ student, onBack, onUpdateUser, currentUser, onDutyRequests, leaveRequests }) => {
     const [editingField, setEditingField] = useState<keyof User | null>(null);
     const [editableStudent, setEditableStudent] = useState<User>(student);
 
@@ -1600,18 +1968,18 @@ const StudentProfileDetail: React.FC<{ student: User; onBack: () => void, onUpda
                 <div className="flex items-center gap-2">
                     <input
                         type={field === 'year' ? 'number' : 'text'}
-                        value={editableStudent[field] as string || ''}
+                        value={editableStudent[field] as string | ''}
                         onChange={(e) => {
                             const value = field === 'year' ? Number(e.target.value) : e.target.value;
                             setEditableStudent(s => ({ ...s, [field]: value }))
                         }}
-                        className="p-1 rounded bg-zinc-100 dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 focus:ring-1 focus:ring-primary-500 focus:outline-none text-sm"
+                        className="p-1 rounded bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 focus:ring-1 focus:ring-blue-500 focus:outline-none text-sm"
                         autoFocus
                     />
-                    <button onClick={handleFieldSave} className="p-1 text-green-600 rounded-full hover:bg-green-100 dark:hover:bg-green-900/50" aria-label="Save">
+                    <button onClick={handleFieldSave} className="p-1 text-green-600 rounded-full hover:bg-green-100 dark:hover:bg-green-500/20" aria-label="Save">
                         <ApproveIcon className="w-5 h-5" />
                     </button>
-                    <button onClick={handleFieldCancel} className="p-1 text-red-600 rounded-full hover:bg-red-100 dark:hover:bg-red-900/50" aria-label="Cancel">
+                    <button onClick={handleFieldCancel} className="p-1 text-red-600 rounded-full hover:bg-red-100 dark:hover:bg-red-500/20" aria-label="Cancel">
                         <RejectIcon className="w-5 h-5" />
                     </button>
                 </div>
@@ -1620,14 +1988,14 @@ const StudentProfileDetail: React.FC<{ student: User; onBack: () => void, onUpda
 
         return (
             <div className="flex items-center gap-2 group">
-                <span className="text-primary-600 dark:text-primary-400 font-medium">{student[field] || 'N/A'}</span>
+                <span className="text-blue-600 dark:text-blue-400 font-medium">{student[field] || 'N/A'}</span>
                 {currentUser.role === Role.STAFF && (
                     <button 
                         onClick={() => {
                             setEditingField(field);
                             setEditableStudent(student); 
                         }} 
-                        className="p-1 text-zinc-400 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 opacity-0 group-hover:opacity-100 transition-opacity" 
+                        className="p-1 text-slate-400 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 opacity-0 group-hover:opacity-100 transition-opacity" 
                         aria-label={`Edit ${field}`}>
                         <EditIcon className="w-4 h-4" />
                     </button>
@@ -1636,11 +2004,13 @@ const StudentProfileDetail: React.FC<{ student: User; onBack: () => void, onUpda
         );
     };
 
-
     const assignments = MOCK_ASSIGNMENTS.filter(a => a.studentId === student.id);
     const attendance = MOCK_ATTENDANCE.filter(a => a.studentId === student.id);
     const attendancePercentage = attendance.length > 0 ? (attendance.filter(a => a.status === 'P').length / attendance.length * 100).toFixed(0) : 'N/A';
     const gradedAssignments = assignments.filter(a => a.status === 'Graded');
+
+    const studentOnDutyHistory = onDutyRequests.filter(r => r.studentId === student.id);
+    const studentLeaveHistory = leaveRequests.filter(r => r.studentId === student.id);
     
     const getAverageGrade = () => {
         const gradeMap: {[key: string]: number} = { 'A+': 95, 'A': 90, 'B+': 85, 'B': 80, 'B-': 75, 'C': 70, 'D': 60 };
@@ -1654,27 +2024,27 @@ const StudentProfileDetail: React.FC<{ student: User; onBack: () => void, onUpda
     return (
         <div className="animate-fadeIn">
              {currentUser.role === Role.STAFF && (
-                <button onClick={onBack} className="mb-4 flex items-center gap-2 text-sm font-semibold text-primary-600 hover:underline">
+                <button onClick={onBack} className="mb-4 flex items-center gap-2 text-sm font-semibold text-blue-600 hover:underline">
                     <ChevronLeftIcon className="w-4 h-4" /> Back to Student List
                 </button>
             )}
             <Card>
                 <div className="flex justify-between items-start">
                     <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
-                        <img src={`https://i.pravatar.cc/150?u=${student.id}`} alt="Profile" className="w-32 h-32 rounded-full" />
+                        <ProfilePicture user={student} size="xl" />
                         <div className="flex-1 text-center md:text-left">
                             <h3 className="text-3xl font-bold">{student.name}</h3>
                             <dl className="mt-2 space-y-1">
                                 <div className="flex items-center gap-2">
-                                    <dt className="text-sm font-medium text-zinc-500 dark:text-zinc-400 w-24 shrink-0">Roll Number</dt>
+                                    <dt className="text-sm font-medium text-slate-500 dark:text-slate-400 w-24 shrink-0">Roll Number</dt>
                                     <dd className="text-sm">{renderEditableField('rollNo')}</dd>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <dt className="text-sm font-medium text-zinc-500 dark:text-zinc-400 w-24 shrink-0">Department</dt>
+                                    <dt className="text-sm font-medium text-slate-500 dark:text-slate-400 w-24 shrink-0">Department</dt>
                                     <dd className="text-sm">{renderEditableField('department')}</dd>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <dt className="text-sm font-medium text-zinc-500 dark:text-zinc-400 w-24 shrink-0">Year</dt>
+                                    <dt className="text-sm font-medium text-slate-500 dark:text-slate-400 w-24 shrink-0">Year</dt>
                                     <dd className="text-sm">{renderEditableField('year')}</dd>
                                 </div>
                             </dl>
@@ -1690,33 +2060,43 @@ const StudentProfileDetail: React.FC<{ student: User; onBack: () => void, onUpda
                 <Card title="Average Grade" className="animate-slideInUp" style={{ animationDelay: '200ms' }}><p className="text-3xl font-bold">{getAverageGrade()}</p></Card>
             </div>
 
-             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-                <Card title="Recent Assignments" className="animate-slideInUp" style={{ animationDelay: '300ms' }}>
-                     <ul className="space-y-2">
-                        {assignments.slice(0,5).map(a => (
-                            <li key={a.id} className="flex justify-between items-center">
-                                <span>{a.subject} ({a.dueDate})</span>
-                                <StatusBadge status={a.status} />
-                            </li>
-                        ))}
-                    </ul>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+                <Card title="On-Duty History" className="animate-slideInUp" style={{ animationDelay: '300ms' }}>
+                    <div className="max-h-60 overflow-y-auto">
+                        <table className="w-full text-sm">
+                            <tbody>
+                            {studentOnDutyHistory.map(r => (
+                                <tr key={r.id} className="border-b dark:border-slate-700 last:border-b-0">
+                                    <td className="py-2 pr-2">{r.eventName}<br/><small className="text-slate-500">{r.fromDate} to {r.toDate}</small></td>
+                                    <td className="py-2 pl-2 text-right"><StatusBadge status={r.status} /></td>
+                                </tr>
+                            ))}
+                             {studentOnDutyHistory.length === 0 && <tr><td colSpan={2} className="text-center py-4 text-slate-500">No on-duty history.</td></tr>}
+                            </tbody>
+                        </table>
+                    </div>
                 </Card>
-                 <Card title="Recent Attendance" className="animate-slideInUp" style={{ animationDelay: '400ms' }}>
-                    <ul className="space-y-2">
-                        {attendance.slice(0,5).map(att => (
-                            <li key={att.id} className="flex justify-between items-center">
-                                <span>{att.date} - {att.subject}</span>
-                                 <span className={`font-semibold ${att.status === 'P' ? 'text-green-600' : 'text-red-600'}`}>{att.status === 'P' ? 'Present' : 'Absent'}</span>
-                            </li>
-                        ))}
-                    </ul>
+                <Card title="Leave History" className="animate-slideInUp" style={{ animationDelay: '400ms' }}>
+                    <div className="max-h-60 overflow-y-auto">
+                        <table className="w-full text-sm">
+                            <tbody>
+                            {studentLeaveHistory.map(r => (
+                                <tr key={r.id} className="border-b dark:border-slate-700 last:border-b-0">
+                                    <td className="py-2 pr-2">{r.leaveType}<br/><small className="text-slate-500">{r.fromDate} to {r.toDate}</small></td>
+                                    <td className="py-2 pl-2 text-right"><StatusBadge status={r.status} /></td>
+                                </tr>
+                            ))}
+                            {studentLeaveHistory.length === 0 && <tr><td colSpan={2} className="text-center py-4 text-slate-500">No leave history.</td></tr>}
+                            </tbody>
+                        </table>
+                    </div>
                 </Card>
             </div>
         </div>
     );
 };
 
-const CalendarView: React.FC<{ user: User, events: Event[] }> = ({ user, events }) => {
+const CalendarView: React.FC<{ user: User, events: Event[], allUsers: User[] }> = ({ user, events, allUsers }) => {
     const [currentDate, setCurrentDate] = useState(new Date());
 
     const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
@@ -1734,11 +2114,14 @@ const CalendarView: React.FC<{ user: User, events: Event[] }> = ({ user, events 
 
     const userEvents = useMemo(() => {
         return events.filter(e => {
-            if (user.role === Role.STAFF) return true; // Staff see all
+            if (user.role === Role.STAFF) return true;
             if (e.audience === 'ALL') return true;
     
-            if (user.role === Role.STUDENT && e.audience === 'STUDENT') {
-                return !e.classId || user.classIds.includes(e.classId);
+            const child = user.role === Role.PARENT ? allUsers.find(u => u.id === user.studentId) : null;
+            const relevantClassIds = user.role === Role.STUDENT ? user.classIds : (child ? child.classIds : []);
+    
+            if ((user.role === Role.STUDENT || user.role === Role.PARENT) && e.audience === 'STUDENT') {
+                return !e.classId || relevantClassIds.includes(e.classId);
             }
     
             if (user.role === Role.PARENT && e.audience === 'PARENT') {
@@ -1747,7 +2130,7 @@ const CalendarView: React.FC<{ user: User, events: Event[] }> = ({ user, events 
             
             return false;
         });
-    }, [events, user]);
+    }, [events, user, allUsers]);
     
     const getEventsForDay = (day: number) => {
         const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -1755,7 +2138,7 @@ const CalendarView: React.FC<{ user: User, events: Event[] }> = ({ user, events 
     };
     
     const eventColors: Record<Event['color'], string> = {
-        blue: 'bg-blue-500',
+        blue: 'bg-sky-500',
         green: 'bg-green-500',
         red: 'bg-red-500',
         yellow: 'bg-yellow-500',
@@ -1766,28 +2149,28 @@ const CalendarView: React.FC<{ user: User, events: Event[] }> = ({ user, events 
         <Card className="animate-scaleIn">
             <div className="flex justify-between items-center mb-4">
                 <div className="flex items-center gap-2">
-                    <button onClick={prevMonth} className="p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-700"><ChevronLeftIcon className="w-6 h-6"/></button>
-                    <button onClick={nextMonth} className="p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-700"><ChevronRightIcon className="w-6 h-6"/></button>
+                    <button onClick={prevMonth} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700"><ChevronLeftIcon className="w-6 h-6"/></button>
+                    <button onClick={nextMonth} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700"><ChevronRightIcon className="w-6 h-6"/></button>
                     <h2 className="text-xl font-semibold">{currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</h2>
                 </div>
                 <Button onClick={goToToday} variant="secondary">Today</Button>
             </div>
-            <div className="grid grid-cols-7 gap-px bg-zinc-200 dark:border-white/10 border dark:border-white/10">
+            <div className="grid grid-cols-7 gap-px bg-slate-200 dark:border-slate-700 border dark:border-slate-700">
                 {weekdays.map(day => (
-                    <div key={day} className="text-center font-semibold text-sm py-2 bg-white dark:bg-zinc-900/80">{day}</div>
+                    <div key={day} className="text-center font-semibold text-sm py-2 bg-white dark:bg-slate-900/80">{day}</div>
                 ))}
                 {Array.from({ length: startDay }).map((_, i) => (
-                    <div key={`empty-${i}`} className="bg-zinc-50 dark:bg-zinc-800/50"></div>
+                    <div key={`empty-${i}`} className="bg-slate-50 dark:bg-slate-800/50"></div>
                 ))}
                 {daysArray.map(day => {
                     const dayEvents = getEventsForDay(day);
                     const isToday = new Date().toDateString() === new Date(currentDate.getFullYear(), currentDate.getMonth(), day).toDateString();
                     return (
-                        <div key={day} className="relative min-h-[120px] bg-white dark:bg-zinc-800/80 p-2">
-                             <span className={`absolute top-2 right-2 text-sm font-semibold ${isToday ? 'bg-primary-600 text-white rounded-full w-6 h-6 flex items-center justify-center' : ''}`}>{day}</span>
+                        <div key={day} className="relative min-h-[120px] bg-white dark:bg-slate-800/80 p-2">
+                             <span className={`absolute top-2 right-2 text-sm font-semibold ${isToday ? 'bg-blue-500 text-white rounded-full w-6 h-6 flex items-center justify-center' : ''}`}>{day}</span>
                             <div className="mt-8 space-y-1">
                                 {dayEvents.map(event => (
-                                    <div key={event.id} className={`p-1 ${eventColors[event.color]} text-white rounded-md text-xs truncate`} title={event.title}>
+                                    <div key={event.id} className={`p-1 ${eventColors[event.color]} text-white rounded-md text-xs truncate`} title={`${event.title}: ${event.description}`}>
                                         {event.title}
                                     </div>
                                 ))}
@@ -1800,6 +2183,361 @@ const CalendarView: React.FC<{ user: User, events: Event[] }> = ({ user, events 
     );
 };
 
+const AllRequestsView: React.FC<{
+    onDutyRequests: OnDutyRequest[];
+    leaveRequests: LeaveRequest[];
+    onUpdateOnDuty: (id: string, status: RequestStatus) => void;
+    onUpdateLeave: (id: string, status: RequestStatus) => void;
+}> = ({ onDutyRequests, leaveRequests, onUpdateOnDuty, onUpdateLeave }) => {
+    
+    type CombinedRequest = (OnDutyRequest & { type: 'On-Duty' }) | (LeaveRequest & { type: 'Leave' });
+    
+    const [searchTerm, setSearchTerm] = useState('');
+    const [statusFilter, setStatusFilter] = useState<RequestStatus | 'All'>('All');
+    const [typeFilter, setTypeFilter] = useState<'All' | 'On-Duty' | 'Leave'>('All');
+    const [sortConfig, setSortConfig] = useState<{ key: keyof CombinedRequest; direction: 'ascending' | 'descending' } | null>({ key: 'fromDate', direction: 'descending' });
+    const [currentPage, setCurrentPage] = useState(1);
+    const [confirmAction, setConfirmAction] = useState<{ action: 'Approve' | 'Reject', request: CombinedRequest } | null>(null);
+
+    const ITEMS_PER_PAGE = 10;
+
+    const combinedRequests = useMemo((): CombinedRequest[] => {
+        const onDuty = onDutyRequests.map(r => ({ ...r, type: 'On-Duty' as const }));
+        const leave = leaveRequests.map(r => ({ ...r, type: 'Leave' as const }));
+        return [...onDuty, ...leave];
+    }, [onDutyRequests, leaveRequests]);
+    
+    const filteredAndSortedRequests = useMemo(() => {
+        let filtered = combinedRequests
+            .filter(r => statusFilter === 'All' || r.status === statusFilter)
+            .filter(r => typeFilter === 'All' || r.type === typeFilter)
+            .filter(r => r.studentName.toLowerCase().includes(searchTerm.toLowerCase()));
+        
+        if (sortConfig !== null) {
+            filtered.sort((a, b) => {
+                // @ts-ignore
+                if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'ascending' ? -1 : 1;
+                // @ts-ignore
+                if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'ascending' ? 1 : -1;
+                return 0;
+            });
+        }
+        return filtered;
+    }, [combinedRequests, statusFilter, typeFilter, searchTerm, sortConfig]);
+
+    const paginatedRequests = useMemo(() => {
+        const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+        return filteredAndSortedRequests.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+    }, [filteredAndSortedRequests, currentPage]);
+
+    const totalPages = Math.ceil(filteredAndSortedRequests.length / ITEMS_PER_PAGE);
+
+    const requestSort = (key: keyof CombinedRequest) => {
+        let direction: 'ascending' | 'descending' = 'ascending';
+        if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
+            direction = 'descending';
+        }
+        setSortConfig({ key, direction });
+    };
+
+    const handleConfirm = () => {
+        if (!confirmAction) return;
+        const { action, request } = confirmAction;
+        const newStatus = action === 'Approve' ? RequestStatus.APPROVED : RequestStatus.REJECTED;
+        if (request.type === 'On-Duty') {
+            onUpdateOnDuty(request.id, newStatus);
+        } else {
+            onUpdateLeave(request.id, newStatus);
+        }
+        setConfirmAction(null);
+    };
+    
+    const SortableHeader: React.FC<{ sortKey: keyof CombinedRequest; children: ReactNode; }> = ({ sortKey, children }) => (
+        <th onClick={() => requestSort(sortKey)} className="px-4 py-2 cursor-pointer">
+            <div className="flex items-center gap-1">
+                {children}
+                {sortConfig?.key === sortKey && (sortConfig.direction === 'ascending' ? <SortAscIcon /> : <SortDescIcon />)}
+            </div>
+        </th>
+    );
+
+    return (
+        <Card className="animate-scaleIn">
+            <h2 className="text-2xl font-bold mb-4">Manage All Student Requests</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                 <div className="relative">
+                    <input type="text" placeholder="Search by student name..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className={searchInputClasses} />
+                    <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                </div>
+                <select value={typeFilter} onChange={e => setTypeFilter(e.target.value as any)} className={inputClasses}>
+                    <option value="All">All Types</option>
+                    <option value="On-Duty">On-Duty</option>
+                    <option value="Leave">Leave</option>
+                </select>
+                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)} className={inputClasses}>
+                    <option value="All">All Statuses</option>
+                    <option value={RequestStatus.PENDING}>Pending</option>
+                    <option value={RequestStatus.APPROVED}>Approved</option>
+                    <option value={RequestStatus.REJECTED}>Rejected</option>
+                </select>
+            </div>
+            <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                    <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-400">
+                        <tr>
+                            <SortableHeader sortKey="studentName">Student</SortableHeader>
+                            <SortableHeader sortKey="type">Type</SortableHeader>
+                            <SortableHeader sortKey="fromDate">Dates</SortableHeader>
+                            <th className="px-4 py-2">Reason/Event</th>
+                            <SortableHeader sortKey="status">Status</SortableHeader>
+                            <th className="px-4 py-2 text-center">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {paginatedRequests.map(req => (
+                            <tr key={`${req.type}-${req.id}`} className="border-b dark:border-slate-700">
+                                <td className="px-4 py-2">{req.studentName}</td>
+                                <td className="px-4 py-2 font-medium">{req.type === 'Leave' ? req.leaveType : req.type}</td>
+                                <td className="px-4 py-2">{req.fromDate}{req.fromDate !== req.toDate && ` to ${req.toDate}`}</td>
+                                <td className="px-4 py-2 truncate max-w-xs">{req.type === 'On-Duty' ? req.eventName : req.reason}</td>
+                                <td className="px-4 py-2"><StatusBadge status={req.status} /></td>
+                                <td className="px-4 py-2">
+                                    {req.status === RequestStatus.PENDING && (
+                                        <div className="flex justify-center items-center gap-2">
+                                            <button onClick={() => setConfirmAction({ action: 'Approve', request: req })} className="p-1.5 text-green-500 rounded-full hover:bg-green-100 dark:hover:bg-green-500/20" aria-label="Approve"><ApproveIcon className="w-5 h-5" /></button>
+                                            <button onClick={() => setConfirmAction({ action: 'Reject', request: req })} className="p-1.5 text-red-500 rounded-full hover:bg-red-100 dark:hover:bg-red-500/20" aria-label="Reject"><RejectIcon className="w-5 h-5" /></button>
+                                        </div>
+                                    )}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+             <div className="flex justify-between items-center mt-4">
+                <span className="text-sm text-slate-500">
+                    Showing {paginatedRequests.length} of {filteredAndSortedRequests.length} requests
+                </span>
+                <div className="flex gap-1">
+                    <Button size="sm" variant="secondary" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>Previous</Button>
+                    <Button size="sm" variant="secondary" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>Next</Button>
+                </div>
+            </div>
+            
+            <ConfirmationDialog isOpen={!!confirmAction} onClose={() => setConfirmAction(null)} onConfirm={handleConfirm} title={`${confirmAction?.action} Request`} confirmVariant={confirmAction?.action === 'Approve' ? 'success' : 'danger'}>
+                Are you sure you want to {confirmAction?.action.toLowerCase()} this request from <strong>{confirmAction?.request.studentName}</strong>?
+            </ConfirmationDialog>
+        </Card>
+    );
+};
+
+const MaterialsView: React.FC<{
+  user: User;
+  selectedClassId: string | null;
+  materials: ClassMaterial[];
+  setMaterials: React.Dispatch<React.SetStateAction<ClassMaterial[]>>;
+  classes: Class[];
+  setAnnouncements: React.Dispatch<React.SetStateAction<Announcement[]>>;
+}> = ({ user, selectedClassId, materials, setMaterials, classes, setAnnouncements }) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingMaterial, setEditingMaterial] = useState<ClassMaterial | null>(null);
+  const [deletingMaterial, setDeletingMaterial] = useState<ClassMaterial | null>(null);
+
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [subject, setSubject] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [fileName, setFileName] = useState('');
+
+  const filteredMaterials = useMemo(() => {
+    return materials
+      .filter(m => selectedClassId === 'ALL' || m.classId === selectedClassId)
+      .filter(m =>
+        m.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        m.subject.toLowerCase().includes(searchTerm.toLowerCase())
+      )
+      .sort((a, b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime());
+  }, [materials, selectedClassId, searchTerm]);
+
+  const handleModalOpen = (material: ClassMaterial | null = null) => {
+    setEditingMaterial(material);
+    if (material) {
+      setTitle(material.title);
+      setDescription(material.description);
+      setSubject(material.subject);
+      setFileName(material.fileName);
+    }
+    setIsModalOpen(true);
+  };
+
+  const handleModalClose = () => {
+    setIsModalOpen(false);
+    setEditingMaterial(null);
+    setTitle('');
+    setDescription('');
+    setSubject('');
+    setFile(null);
+    setFileName('');
+  };
+
+  const handleSubmit = () => {
+    if (!title || !subject || (!file && !editingMaterial)) {
+      alert('Please fill all required fields and select a file.');
+      return;
+    }
+
+    if (editingMaterial) {
+      const updatedMaterial: ClassMaterial = {
+        ...editingMaterial,
+        title,
+        description,
+        subject,
+        fileName: file ? file.name : editingMaterial.fileName,
+        fileSize: file ? file.size : editingMaterial.fileSize,
+        fileUrl: file ? URL.createObjectURL(file) : editingMaterial.fileUrl,
+      };
+      setMaterials(materials.map(m => m.id === editingMaterial.id ? updatedMaterial : m));
+    } else if (selectedClassId && selectedClassId !== 'ALL' && file) {
+      const newMaterial: ClassMaterial = {
+        id: `CMAT${Date.now()}`,
+        classId: selectedClassId,
+        title,
+        description,
+        subject,
+        fileName: file.name,
+        fileSize: file.size,
+        fileUrl: URL.createObjectURL(file), // Mock URL for display
+        uploadedBy: user.id,
+        uploadedByName: user.name,
+        uploadDate: new Date().toISOString().split('T')[0],
+      };
+      setMaterials(prev => [newMaterial, ...prev]);
+
+      const newAnnouncement: Announcement = {
+        id: `AN-mat-${Date.now()}`,
+        staffId: user.id,
+        staffName: user.name,
+        classId: selectedClassId,
+        title: `New Material Uploaded: ${title}`,
+        content: `A new file "${file.name}" for the subject "${subject}" has been uploaded to the Class Materials section.`,
+        timestamp: new Date().toISOString(),
+        targetAudience: 'STUDENT',
+      };
+      setAnnouncements(prev => [newAnnouncement, ...prev]);
+    }
+    handleModalClose();
+  };
+  
+  const handleDeleteConfirm = () => {
+    if (deletingMaterial) {
+      setMaterials(materials.filter(m => m.id !== deletingMaterial.id));
+      setDeletingMaterial(null);
+    }
+  };
+
+  return (
+    <Card className="animate-scaleIn">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
+        <h2 className="text-xl font-semibold">Class Materials</h2>
+        {user.role === Role.STAFF && (
+          <Button onClick={() => handleModalOpen()} disabled={!selectedClassId || selectedClassId === 'ALL'}>
+            Upload New Material
+          </Button>
+        )}
+      </div>
+      <div className="relative mb-4">
+        <input type="text" placeholder="Search by title or subject..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className={searchInputClasses} />
+        <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm text-left">
+          <thead className="bg-slate-50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-400">
+            <tr>
+              <th className="px-4 py-2">Title / Subject</th>
+              <th className="px-4 py-2">Uploaded By</th>
+              <th className="px-4 py-2">Date</th>
+              <th className="px-4 py-2">File</th>
+              <th className="px-4 py-2 text-center">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredMaterials.map(material => (
+              <tr key={material.id} className="border-b dark:border-slate-700">
+                <td className="px-4 py-2">
+                  <p className="font-semibold">{material.title}</p>
+                  <p className="text-xs text-slate-500">{material.subject}</p>
+                </td>
+                <td className="px-4 py-2">{material.uploadedByName}</td>
+                <td className="px-4 py-2">{material.uploadDate}</td>
+                <td className="px-4 py-2">
+                    {material.fileName} <span className="text-slate-400">({(material.fileSize / 1024 / 1024).toFixed(2)} MB)</span>
+                </td>
+                <td className="px-4 py-2 text-center">
+                  {user.role === Role.STAFF ? (
+                    <div className="flex justify-center items-center gap-2">
+                      <button onClick={() => handleModalOpen(material)} className="p-1.5 text-slate-500 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700" aria-label="Edit"><EditIcon className="w-5 h-5" /></button>
+                      <button onClick={() => setDeletingMaterial(material)} className="p-1.5 text-red-500 rounded-full hover:bg-red-100 dark:hover:bg-red-500/20" aria-label="Delete"><TrashIcon className="w-5 h-5" /></button>
+                    </div>
+                  ) : (
+                    <a href={material.fileUrl} download={material.fileName} className="inline-block">
+                      <Button size="sm">Download</Button>
+                    </a>
+                  )}
+                </td>
+              </tr>
+            ))}
+             {filteredMaterials.length === 0 && (
+                <tr>
+                    <td colSpan={5} className="text-center py-8 text-slate-500 dark:text-slate-400">No materials found.</td>
+                </tr>
+             )}
+          </tbody>
+        </table>
+      </div>
+      
+      <Modal isOpen={isModalOpen} onClose={handleModalClose} title={editingMaterial ? "Edit Material" : "Upload New Material"}
+        footer={<><Button variant="secondary" onClick={handleModalClose}>Cancel</Button><Button onClick={handleSubmit}>{editingMaterial ? "Save Changes" : "Upload"}</Button></>}
+      >
+        <div className="space-y-4">
+            <div>
+                <label className="block text-sm font-medium">Title</label>
+                <input type="text" value={title} onChange={e => setTitle(e.target.value)} className={`mt-1 ${inputClasses}`} />
+            </div>
+            <div>
+                <label className="block text-sm font-medium">Subject</label>
+                <input type="text" value={subject} onChange={e => setSubject(e.target.value)} className={`mt-1 ${inputClasses}`} />
+            </div>
+            <div>
+                <label className="block text-sm font-medium">Description</label>
+                <textarea rows={3} value={description} onChange={e => setDescription(e.target.value)} className={`mt-1 ${inputClasses}`} />
+            </div>
+             <div>
+                <label className="block text-sm font-medium">File</label>
+                <input
+                    type="file"
+                    onChange={(e) => {
+                        if(e.target.files?.[0]) {
+                            setFile(e.target.files[0]);
+                            setFileName(e.target.files[0].name);
+                        }
+                    }}
+                    className="mt-1 block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                />
+                {fileName && <p className="text-sm text-slate-500 mt-2">Selected: {fileName}</p>}
+            </div>
+        </div>
+      </Modal>
+
+      <ConfirmationDialog isOpen={!!deletingMaterial} onClose={() => setDeletingMaterial(null)} onConfirm={handleDeleteConfirm} title="Delete Material" confirmVariant="danger">
+        Are you sure you want to delete the material "<strong>{deletingMaterial?.title}</strong>"? This action cannot be undone.
+      </ConfirmationDialog>
+    </Card>
+  );
+};
+
+
 const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, theme, toggleTheme, updateUser, allUsers, onUpdateAllUsers }) => {
   const [activeView, setActiveView] = useState('overview');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -1809,13 +2547,18 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, theme, toggleThem
   
   const [onDutyRequests, setOnDutyRequests] = useState<OnDutyRequest[]>(MOCK_ONDUTY_REQUESTS);
   const [noDueRequests, setNoDueRequests] = useState<NoDueRequest[]>(MOCK_NODUE_REQUESTS);
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(MOCK_LEAVE_REQUESTS);
 
   const [assignments, setAssignments] = useState<Assignment[]>(MOCK_ASSIGNMENTS);
+  const [attendance, setAttendance] = useState<Attendance[]>(MOCK_ATTENDANCE);
+  const [announcements, setAnnouncements] = useState<Announcement[]>(MOCK_ANNOUNCEMENTS);
 
   const [classes, setClasses] = useState<Class[]>(MOCK_CLASSES);
   const [classMemberships, setClassMemberships] = useState<ClassMembership[]>(MOCK_CLASS_MEMBERSHIPS);
+  const [sections, setSections] = useState<Section[]>(MOCK_SECTIONS);
   
   const [events, setEvents] = useState<Event[]>(MOCK_EVENTS);
+  const [classMaterials, setClassMaterials] = useState<ClassMaterial[]>(MOCK_CLASS_MATERIALS);
   
   const onUpdateUser = (updatedUser: User) => {
     onUpdateAllUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
@@ -1841,11 +2584,63 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, theme, toggleThem
   
   useEffect(() => {
     if (user.role === Role.STAFF) {
-      setSelectedClassId(classes.length > 0 ? classes[0].id : null);
+      setSelectedClassId(classes.length > 0 ? classes[0].id : 'ALL');
     } else {
       setSelectedClassId(studentClasses.length > 0 ? studentClasses[0].id : null);
     }
   }, [user.role, classes, studentClasses]);
+
+  // Send reminders for events starting in 3 days
+  useEffect(() => {
+    if (user.role === Role.STAFF) return; // Reminders are for students/parents
+
+    const threeDaysFromNow = new Date();
+    threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3);
+
+    const relevantEvents = events.filter(e => {
+        if (e.audience === 'ALL') return true;
+        
+        const child = user.role === Role.PARENT ? allUsers.find(u => u.id === user.studentId) : null;
+        const relevantClassIds = user.role === Role.STUDENT ? user.classIds : (child ? child.classIds : []);
+
+        if ((user.role === Role.STUDENT || user.role === Role.PARENT) && e.audience === 'STUDENT') {
+            return !e.classId || relevantClassIds.includes(e.classId);
+        }
+
+        if (user.role === Role.PARENT && e.audience === 'PARENT') {
+            return true;
+        }
+        
+        return false;
+    });
+
+    const upcomingEvents = relevantEvents.filter(e => {
+      const eventDate = new Date(e.start);
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      return eventDate <= threeDaysFromNow && eventDate >= today;
+    });
+
+    const notificationsToAdd: Notification[] = [];
+    upcomingEvents.forEach(event => {
+        const message = `Upcoming Event: ${event.title} is starting on ${event.start}.`;
+        const reminderExists = notifications.some(n => n.message === message);
+        if (!reminderExists) {
+            notificationsToAdd.push({
+                id: `N-reminder-event-${event.id}`,
+                userId: user.id,
+                message: message,
+                type: NotificationType.INFO,
+                timestamp: new Date().toISOString(),
+                read: false,
+            });
+        }
+    });
+
+    if (notificationsToAdd.length > 0) {
+        setNotifications(prev => [...notificationsToAdd, ...prev]);
+    }
+  }, [events, user, allUsers, notifications, setNotifications]);
 
 
   const handleAddNewNoDueRequest = (department: string, remarks: string) => {
@@ -1900,6 +2695,108 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, theme, toggleThem
         }
     };
 
+    const handleUpdateOnDutyRequestStatus = (requestId: string, status: RequestStatus) => {
+        let studentId = '';
+        setOnDutyRequests(prev => prev.map(req => {
+            if (req.id === requestId) {
+                studentId = req.studentId;
+                return { ...req, status };
+            }
+            return req;
+        }));
+
+        if (studentId) {
+            const student = allUsers.find(u => u.id === studentId);
+            const request = onDutyRequests.find(r => r.id === requestId);
+            if (student && request) {
+                const newNotification: Notification = {
+                    id: `N-od-${Date.now()}${student.id}`,
+                    userId: student.id,
+                    message: `Your On-Duty request for "${request.eventName}" has been ${status.toLowerCase()}.`,
+                    type: status === RequestStatus.APPROVED ? NotificationType.SUCCESS : NotificationType.ERROR,
+                    timestamp: new Date().toISOString(),
+                    read: false,
+                };
+                setNotifications(prev => [newNotification, ...prev]);
+            }
+        }
+    };
+
+     const handleAddNewLeaveRequest = (requestData: Omit<LeaveRequest, 'id' | 'status' | 'studentName'>) => {
+        const newRequest: LeaveRequest = {
+            ...requestData,
+            id: `LR${Date.now()}`,
+            studentName: user.name,
+            status: RequestStatus.PENDING,
+        };
+        setLeaveRequests(prev => [newRequest, ...prev]);
+
+        const staffUsers = allUsers.filter(u => u.role === Role.STAFF);
+        const newNotifications: Notification[] = staffUsers.map(staff => ({
+             id: `N-lr-${Date.now()}${staff.id}`,
+             userId: staff.id,
+             message: `New Leave request from ${user.name}.`,
+             type: NotificationType.INFO,
+             timestamp: new Date().toISOString(),
+             read: false,
+        }));
+        setNotifications(prev => [...newNotifications, ...prev]);
+    };
+
+    const handleUpdateLeaveRequestStatus = (requestId: string, status: RequestStatus) => {
+        let studentId = '';
+        setLeaveRequests(prev => prev.map(req => {
+            if (req.id === requestId) {
+                studentId = req.studentId;
+                return { ...req, status };
+            }
+            return req;
+        }));
+
+        if (studentId) {
+            const student = allUsers.find(u => u.id === studentId);
+            const request = leaveRequests.find(r => r.id === requestId);
+            if (student && request) {
+                const newNotification: Notification = {
+                    id: `N-lr-update-${Date.now()}${student.id}`,
+                    userId: student.id,
+                    message: `Your ${request.leaveType} request for ${request.fromDate} has been ${status.toLowerCase()}.`,
+                    type: status === RequestStatus.APPROVED ? NotificationType.SUCCESS : NotificationType.ERROR,
+                    timestamp: new Date().toISOString(),
+                    read: false,
+                };
+                setNotifications(prev => [newNotification, ...prev]);
+            }
+        }
+    };
+    
+    const handleMarkAttendance = (classId: string, date: string, subject: string, studentStatuses: Map<string, AttendanceStatus>) => {
+        const updatedAttendance = [...attendance];
+        
+        studentStatuses.forEach((status, studentId) => {
+            const existingIndex = updatedAttendance.findIndex(a => 
+                a.classId === classId && 
+                a.date === date && 
+                a.subject === subject &&
+                a.studentId === studentId
+            );
+
+            if (existingIndex !== -1) {
+                updatedAttendance[existingIndex] = { ...updatedAttendance[existingIndex], status };
+            } else {
+                updatedAttendance.push({
+                    id: `AT-${Date.now()}-${studentId}`,
+                    studentId,
+                    classId,
+                    date,
+                    status,
+                    subject,
+                });
+            }
+        });
+        setAttendance(updatedAttendance);
+    };
+
     const handleCreateClass = (name: string, description: string) => {
       const newClass: Class = {
         id: `C${Date.now()}`,
@@ -1909,11 +2806,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, theme, toggleThem
       setClasses(prev => [...prev, newClass]);
     };
   
-    const handleAddStudentsToClass = (classId: string, studentIds: string[]) => {
+    const handleAddStudentsToClass = (classId: string, studentIds: string[], sectionId: string | null) => {
       const newMemberships: ClassMembership[] = studentIds.map(studentId => ({
         id: `CM${Date.now()}${Math.random()}`,
         userId: studentId,
         classId,
+        sectionId,
         role: Role.STUDENT,
       }));
       setClassMemberships(prev => [...prev, ...newMemberships]);
@@ -1930,17 +2828,26 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, theme, toggleThem
       }));
     };
   
-    const handleRemoveStudentFromClass = (classId: string, studentId: string) => {
-      setClassMemberships(prev => prev.filter(cm => !(cm.classId === classId && cm.userId === studentId)));
-  
-      onUpdateAllUsers(prevUsers => prevUsers.map(u => {
-        if (u.id === studentId) {
-          const updatedUser = { ...u, classIds: u.classIds.filter(id => id !== classId) };
-          if (u.id === user.id) updateUser(updatedUser);
-          return updatedUser;
+    const handleRemoveStudentFromClass = (membershipId: string) => {
+        const membership = classMemberships.find(cm => cm.id === membershipId);
+        if(!membership) return;
+
+        // Find if user is in other classes, if not, remove class from user's classIds
+        const otherMemberships = classMemberships.filter(cm => cm.userId === membership.userId && cm.id !== membership.id);
+        const inOtherClasses = otherMemberships.some(cm => cm.classId === membership.classId);
+
+        setClassMemberships(prev => prev.filter(cm => cm.id !== membershipId));
+        
+        if (!inOtherClasses) {
+             onUpdateAllUsers(prevUsers => prevUsers.map(u => {
+                if (u.id === membership.userId) {
+                const updatedUser = { ...u, classIds: u.classIds.filter(id => id !== membership.classId) };
+                if (u.id === user.id) updateUser(updatedUser);
+                return updatedUser;
+                }
+                return u;
+            }));
         }
-        return u;
-      }));
     };
 
     const handleUpdateClass = (classId: string, name: string, description: string) => {
@@ -1960,8 +2867,11 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, theme, toggleThem
     
       // 2. Remove all memberships associated with that class
       setClassMemberships(prev => prev.filter(cm => cm.classId !== classId));
+
+      // 3. Remove all sections associated with that class
+      setSections(prev => prev.filter(s => s.classId !== classId));
     
-      // 3. Update all users to remove the deleted classId from their classIds array
+      // 4. Update all users to remove the deleted classId from their classIds array
       onUpdateAllUsers(prevUsers => prevUsers.map(u => {
         if (u.classIds.includes(classId)) {
           const updatedUser = { ...u, classIds: u.classIds.filter(id => id !== classId) };
@@ -1975,14 +2885,39 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, theme, toggleThem
       }));
     };
 
+    const handleCreateSection = (classId: string, name: string) => {
+        const newSection: Section = {
+            id: `S${Date.now()}`,
+            name,
+            classId,
+        };
+        setSections(prev => [...prev, newSection]);
+    };
+
+    const handleUpdateSection = (sectionId: string, name: string) => {
+        setSections(prev => prev.map(s => s.id === sectionId ? { ...s, name } : s));
+    };
+
+    const handleDeleteSection = (sectionId: string) => {
+        setSections(prev => prev.filter(s => s.id !== sectionId));
+        // Unassign students from this section
+        setClassMemberships(prev => prev.map(cm => cm.sectionId === sectionId ? { ...cm, sectionId: null } : cm));
+    };
+
+    const handleAssignStudentToSection = (membershipId: string, sectionId: string | null) => {
+        setClassMemberships(prev => prev.map(cm => cm.id === membershipId ? { ...cm, sectionId } : cm));
+    };
+
   const menuItems = [
     { name: 'Dashboard', icon: HomeIcon, view: 'overview' },
     { name: 'Class Dashboard', icon: ClassIcon, view: 'classDashboard' },
     { name: 'Manage Classes', icon: GraduationCapIcon, view: 'manageClasses', roles: [Role.STAFF] },
+    { name: 'Manage Requests', icon: DocumentTextIcon, view: 'allRequests', roles: [Role.STAFF] },
     { name: 'Assignments', icon: AssignmentIcon, view: 'assignments' },
+    { name: 'Class Materials', icon: BookOpenIcon, view: 'materials' },
     { name: 'Attendance', icon: AttendanceIcon, view: 'attendance' },
-    { name: 'Requests', icon: RequestIcon, view: 'requests' },
-    { name: 'Student Profiles', icon: UserIcon, view: 'profiles', roles: [Role.STUDENT, Role.STAFF, Role.PARENT] },
+    { name: 'My Requests', icon: RequestIcon, view: 'requests', roles: [Role.STUDENT, Role.PARENT] },
+    { name: 'Student Profiles', icon: UserIcon, view: 'profiles' },
     { name: 'Messages', icon: MessageIcon, view: 'messages' },
     { name: 'Announcements', icon: AnnouncementIcon, view: 'announcements' },
     { name: 'Calendar', icon: CalendarIcon, view: 'calendar' },
@@ -1995,134 +2930,117 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, theme, toggleThem
     switch (activeView) {
       case 'overview': return <OverviewContent user={user} setActiveView={setActiveView} selectedClassId={selectedClassId} classes={classes} />;
       case 'classDashboard': return <ClassDashboardView user={user} selectedClassId={selectedClassId} setActiveView={setActiveView} classes={classes} classMemberships={classMemberships} />;
-      case 'manageClasses': return <ManageClassesView user={user} classes={classes} classMemberships={classMemberships} allUsers={allUsers} onCreateClass={handleCreateClass} onAddStudents={handleAddStudentsToClass} onRemoveStudent={handleRemoveStudentFromClass} onUpdateClass={handleUpdateClass} onDeleteClass={handleDeleteClass} />;
-      case 'assignments': return <AssignmentView user={user} selectedClassId={selectedClassId} assignments={assignments} setAssignments={setAssignments} notifications={notifications} setNotifications={setNotifications} />;
-      case 'attendance': return <AttendanceView user={user} selectedClassId={selectedClassId} />;
-      case 'requests': return <RequestsView user={user} onDutyRequests={onDutyRequests} noDueRequests={noDueRequests} onAddNoDueRequest={handleAddNewNoDueRequest} onUpdateNoDueRequestStatus={handleUpdateNoDueRequestStatus} />;
-      case 'feedback': return <FeedbackView user={user} />;
+      case 'manageClasses': return <ManageClassesView user={user} classes={classes} sections={sections} classMemberships={classMemberships} allUsers={allUsers} onCreateClass={handleCreateClass} onAddStudents={handleAddStudentsToClass} onRemoveStudent={handleRemoveStudentFromClass} onUpdateClass={handleUpdateClass} onDeleteClass={handleDeleteClass} onCreateSection={handleCreateSection} onUpdateSection={handleUpdateSection} onDeleteSection={handleDeleteSection} onAssignStudentToSection={handleAssignStudentToSection} />;
+      // Fix: Complete the switch case for 'allRequests'
+      case 'allRequests': return <AllRequestsView onDutyRequests={onDutyRequests} leaveRequests={leaveRequests} onUpdateOnDuty={handleUpdateOnDutyRequestStatus} onUpdateLeave={handleUpdateLeaveRequestStatus} />;
+      case 'assignments': return <AssignmentView user={user} selectedClassId={selectedClassId} assignments={assignments} setAssignments={setAssignments} notifications={notifications} setNotifications={setNotifications} allUsers={allUsers} classMemberships={classMemberships} classes={classes} />;
+      case 'materials': return <MaterialsView user={user} selectedClassId={selectedClassId} materials={classMaterials} setMaterials={setClassMaterials} classes={classes} setAnnouncements={setAnnouncements} />;
+      case 'attendance': return <AttendanceView user={user} selectedClassId={selectedClassId} attendance={attendance} classMemberships={classMemberships} allUsers={allUsers} onMarkAttendance={handleMarkAttendance} />;
+      case 'requests': return <RequestsView user={user} onDutyRequests={onDutyRequests} noDueRequests={noDueRequests} leaveRequests={leaveRequests} onAddNoDueRequest={handleAddNewNoDueRequest} onUpdateNoDueRequestStatus={handleUpdateNoDueRequestStatus} onUpdateOnDutyRequestStatus={handleUpdateOnDutyRequestStatus} onUpdateLeaveRequestStatus={handleUpdateLeaveRequestStatus} onAddLeaveRequest={handleAddNewLeaveRequest} />;
+      case 'profiles': return <StudentProfilesView user={user} allUsers={allUsers} onUpdateUser={onUpdateUser} onDutyRequests={onDutyRequests} leaveRequests={leaveRequests} />;
       case 'messages': return <MessagesView user={user} selectedClassId={selectedClassId} classes={classes} />;
-      case 'announcements': return <AnnouncementsView user={user} selectedClassId={selectedClassId} classes={classes} />;
-      case 'profiles': return <StudentProfilesView user={user} allUsers={allUsers} onUpdateUser={onUpdateUser} />;
-      case 'calendar': return <CalendarView user={user} events={events} />;
+      case 'announcements': return <AnnouncementsView user={user} selectedClassId={selectedClassId} classes={classes} announcements={announcements} setAnnouncements={setAnnouncements} />;
+      case 'calendar': return <CalendarView user={user} events={events} allUsers={allUsers} />;
+      case 'feedback': return <FeedbackView user={user} />;
       case 'profile': return <ProfileView user={user} onUpdateUser={onUpdateUser} onChangePassword={handleChangePassword} />;
-      default: return <div>Select a view</div>;
+      default: return <OverviewContent user={user} setActiveView={setActiveView} selectedClassId={selectedClassId} classes={classes} />;
     }
   };
 
-  const notificationPopupRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (notificationPopupRef.current && !notificationPopupRef.current.contains(event.target as Node)) {
-        setShowNotifications(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const unreadCount = notifications.filter(n => !n.read && n.userId === user.id).length;
-
-  const Header = () => (
-    <header className="bg-white/80 dark:bg-zinc-900/80 dark:backdrop-blur-lg p-4 flex items-center justify-between border-b border-zinc-200 dark:border-white/10">
-      <div className="flex items-center gap-4">
-        <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="lg:hidden p-2">
-          <MenuIcon />
-        </button>
-        <div className="flex items-center gap-2">
-            <ActiveIcon className="w-6 h-6 text-primary-500" />
-            <span className="text-xl font-semibold text-zinc-800 dark:text-zinc-200">{menuItems.find(item => item.view === activeView)?.name}</span>
-        </div>
-      </div>
-       <div className="flex items-center gap-4">
-        {user.role === Role.STAFF ? (
-          <select value={selectedClassId || ''} onChange={e => setSelectedClassId(e.target.value)}
-            className="p-2 border rounded-md bg-zinc-50 dark:bg-zinc-700 border-zinc-300 dark:border-zinc-600">
-            <option value="ALL">All Classes</option>
-            {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        ) : (
-          <select value={selectedClassId || ''} onChange={e => setSelectedClassId(e.target.value)}
-            className="p-2 border rounded-md bg-zinc-50 dark:bg-zinc-700 border-zinc-300 dark:border-zinc-600">
-            {studentClasses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        )}
-      </div>
-      <div className="flex items-center gap-4">
-        <button onClick={toggleTheme} className="p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-700">
-            {theme === 'light' ? <MoonIcon/> : <SunIcon/>}
-        </button>
-        <div className="relative" ref={notificationPopupRef}>
-            <button onClick={() => setShowNotifications(s => !s)} className="p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-700 relative">
-                <NotificationIcon />
-                {unreadCount > 0 && <span className="absolute top-0 right-0 block h-3 w-3 rounded-full bg-red-500 border-2 border-white dark:border-zinc-800" />}
-            </button>
-            {showNotifications && (
-                <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-zinc-800/80 dark:backdrop-blur-lg dark:border dark:border-white/10 rounded-lg shadow-lg z-10 animate-scaleIn">
-                    <div className="p-3 font-semibold border-b dark:border-white/10">Notifications</div>
-                    <div className="max-h-80 overflow-y-auto">
-                        {notifications.filter(n => n.userId === user.id).map(n => (
-                             <div key={n.id} className={`p-3 border-b dark:border-white/10 text-sm ${!n.read ? 'bg-primary-50 dark:bg-primary-900/20' : ''}`}>
-                                <p>{n.message}</p>
-                                <p className="text-xs text-zinc-400 mt-1">{new Date(n.timestamp).toLocaleString()}</p>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-        </div>
-        <button onClick={() => setActiveView('profile')} className="flex items-center gap-2">
-            <img src={`https://i.pravatar.cc/40?u=${user.id}`} alt="Profile" className="w-10 h-10 rounded-full" />
-        </button>
-      </div>
-    </header>
-  );
-
-  const Sidebar = () => (
-    <aside className={`fixed lg:relative inset-y-0 left-0 w-64 bg-primary-800 dark:bg-zinc-950/80 dark:backdrop-blur-xl dark:border-r dark:border-white/10 text-white transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 transition-transform duration-300 ease-in-out z-40 flex flex-col`}>
-      <div className="p-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Portal</h1>
-        <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden p-2">
-            <CloseIcon />
-        </button>
-      </div>
-      <nav className="flex-1 px-4 space-y-2">
-        {menuItems.map(item => (
-          <button
-            key={item.name}
-            onClick={() => { setActiveView(item.view); setIsSidebarOpen(false); }}
-            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transform transition-all duration-200 hover:translate-x-1 ${
-              activeView === item.view
-                ? 'bg-primary-900 dark:bg-white/10 dark:shadow-glow text-white'
-                : 'hover:bg-primary-700 dark:hover:bg-white/5 text-primary-100 hover:text-white'
-            }`}
-          >
-            <item.icon className="w-5 h-5" />
-            <span>{item.name}</span>
-          </button>
-        ))}
-      </nav>
-      <div className="p-4 border-t border-primary-700 dark:border-white/10">
-        <button
-            onClick={onLogout}
-            className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-primary-700 dark:hover:bg-white/5 text-primary-100 hover:text-white transform transition-all duration-200 hover:translate-x-1"
-        >
-            <LogoutIcon className="w-5 h-5" />
-            <span>Logout</span>
-        </button>
-      </div>
-    </aside>
-  );
-
+  // Fix: Add return statement to the Dashboard component
   return (
-    <div className="flex h-screen">
-      <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <Header />
-        <main className="flex-1 overflow-y-auto p-6 bg-zinc-100 dark:bg-transparent">
-           <div key={activeView} className="animate-fadeIn">
-             {renderContent()}
-           </div>
+    <div className="flex h-screen bg-slate-100 dark:bg-slate-900 overflow-hidden">
+      {/* Sidebar */}
+      <div className={`fixed inset-y-0 left-0 z-30 w-64 bg-white dark:bg-slate-800 shadow-lg transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 lg:flex-shrink-0 flex flex-col`}>
+        <div className="flex items-center justify-between p-4 border-b dark:border-slate-700 flex-shrink-0">
+            <h1 className="text-xl font-bold text-blue-600 dark:text-blue-500">Student Portal</h1>
+            <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden p-1 text-slate-500 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700">
+                <CloseIcon className="w-6 h-6" />
+            </button>
+        </div>
+        <nav className="flex-1 mt-4 p-2 space-y-1 overflow-y-auto">
+            {menuItems.map(item => (
+                <a key={item.name} href="#" onClick={(e) => { e.preventDefault(); setActiveView(item.view); setIsSidebarOpen(false); }}
+                   className={`flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${activeView === item.view ? 'bg-blue-500 text-white shadow-md' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
+                    <item.icon className="w-5 h-5" />
+                    <span>{item.name}</span>
+                </a>
+            ))}
+        </nav>
+        <div className="p-4 border-t dark:border-slate-700 flex-shrink-0">
+            <a href="#" onClick={(e) => { e.preventDefault(); setActiveView('profile'); setIsSidebarOpen(false); }} className="flex items-center gap-3 w-full p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700">
+                <ProfilePicture user={user} size="md" />
+                <div className="flex-1 overflow-hidden">
+                    <p className="font-semibold text-sm truncate text-slate-900 dark:text-slate-100">{user.name}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 capitalize">{user.role.toLowerCase()}</p>
+                </div>
+            </a>
+        </div>
+      </div>
+      
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col w-full overflow-hidden">
+        {/* Header */}
+        <header className="flex-shrink-0 bg-white dark:bg-slate-800 shadow-md z-10">
+          <div className="flex items-center justify-between p-4">
+            <div className="flex items-center gap-4">
+                <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-1 text-slate-500">
+                    <MenuIcon className="w-6 h-6" />
+                </button>
+                <h2 className="text-xl font-semibold hidden md:block">{menuItems.find(item => item.view === activeView)?.name || 'My Profile'}</h2>
+            </div>
+            
+            <div className="flex items-center gap-2 sm:gap-4">
+                {/* Class Selector */}
+                {(user.role !== Role.PARENT) && ['overview', 'classDashboard', 'assignments', 'materials', 'attendance', 'messages'].includes(activeView) && (
+                    <select value={selectedClassId || ''} onChange={e => setSelectedClassId(e.target.value)} className="p-2 border rounded-lg bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 focus:outline-none text-sm max-w-[150px] sm:max-w-xs">
+                        {user.role === Role.STAFF && <option value="ALL">All Classes</option>}
+                        {(user.role === Role.STAFF ? classes : studentClasses).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                )}
+
+                {/* Notifications */}
+                <div className="relative">
+                    <button onClick={() => setShowNotifications(!showNotifications)} className="p-2 text-slate-500 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700">
+                        <NotificationIcon className="w-6 h-6" />
+                        {notifications.filter(n => !n.read).length > 0 && (
+                            <span className="absolute top-0 right-0 block h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-slate-800"></span>
+                        )}
+                    </button>
+                     {showNotifications && (
+                        <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-slate-800 rounded-lg shadow-lg border dark:border-slate-700 z-20 animate-scaleIn">
+                            <div className="p-3 font-semibold border-b dark:border-slate-700 flex justify-between items-center">
+                                <span>Notifications</span>
+                                <button onClick={() => setNotifications(notifications.map(n => ({...n, read: true})))} className="text-xs font-medium text-blue-600 hover:underline">Mark all as read</button>
+                            </div>
+                            <div className="max-h-96 overflow-y-auto">
+                                {notifications.length > 0 ? notifications.map(n => (
+                                    <div key={n.id} className={`p-3 border-b dark:border-slate-700 last:border-b-0 ${!n.read ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}>
+                                        <p className="text-sm text-slate-800 dark:text-slate-200">{n.message}</p>
+                                        <p className="text-xs text-slate-400 mt-1">{new Date(n.timestamp).toLocaleString()}</p>
+                                    </div>
+                                )) : <p className="p-4 text-sm text-slate-500">No new notifications.</p>}
+                            </div>
+                        </div>
+                    )}
+                </div>
+                
+                {/* Theme Toggle */}
+                <button onClick={toggleTheme} className="p-2 text-slate-500 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700">
+                    {theme === 'light' ? <MoonIcon className="w-6 h-6"/> : <SunIcon className="w-6 h-6"/>}
+                </button>
+
+                {/* Logout */}
+                <button onClick={onLogout} className="p-2 text-slate-500 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700">
+                    <LogoutIcon className="w-6 h-6" />
+                </button>
+            </div>
+          </div>
+        </header>
+
+        {/* Content Area */}
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6">
+            {renderContent()}
         </main>
       </div>
     </div>
