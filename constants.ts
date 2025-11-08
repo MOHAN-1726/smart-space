@@ -27,11 +27,11 @@ export const MOCK_CLASS_MEMBERSHIPS: ClassMembership[] = [
 ];
 
 export const MOCK_USERS: User[] = [
-  { id: '1', name: 'Mohanraj', email: 'student1@mail.com', role: Role.STUDENT, password: 'password123', rollNo: 'S001', department: 'Computer Science', year: 3, classIds: ['C1', 'C2'], profilePhotoUrl: `https://i.pravatar.cc/150?u=1` },
-  { id: '2', name: 'Arthi Priyadharshini', email: 'staff1@mail.com', role: Role.STAFF, password: 'password123', staffId: 'T001', designation: 'Professor', classIds: ['C1', 'C2', 'C3'], profilePhotoUrl: `https://i.pravatar.cc/150?u=2` },
-  { id: '3', name: 'Sivakami', email: 'parent1@mail.com', role: Role.PARENT, password: 'password123', studentId: '1', classIds: [], profilePhotoUrl: `https://i.pravatar.cc/150?u=3` },
-  { id: '4', name: 'Akash', email: 'student2@mail.com', role: Role.STUDENT, password: 'password123', rollNo: 'S002', department: 'Mechanical Engineering', year: 2, classIds: ['C3'], profilePhotoUrl: `https://i.pravatar.cc/150?u=4` },
-  { id: '5', name: 'Sathya', email: 'student3@mail.com', role: Role.STUDENT, password: 'password123', rollNo: 'S003', department: 'Computer Science', year: 3, classIds: ['C1'], profilePhotoUrl: `https://i.pravatar.cc/150?u=5` },
+  { id: '1', name: 'Mohanraj', email: 'student1@mail.com', role: Role.STUDENT, password: 'password123', rollNo: 'S001', department: 'Computer Science', year: 3, classIds: ['C1', 'C2'], profilePhotoUrl: "public/images/d7776adf-f54a-411a-8858-ecef49ff6c1a.jpeg"  },
+  { id: '2', name: 'Arthi Priyadharshini', email: 'staff1@mail.com', role: Role.STAFF, password: 'password123', staffId: 'T001', designation: 'Professor', classIds: ['C1', 'C2', 'C3'], profilePhotoUrl: "public/images/car.jpg" },
+  { id: '3', name: 'Sivakami', email: 'parent1@mail.com', role: Role.PARENT, password: 'password123', studentId: '1', classIds: [], profilePhotoUrl: "public/images/car2.jpg" },
+  { id: '4', name: 'Akash', email: 'student2@mail.com', role: Role.STUDENT, password: 'password123', rollNo: 'S002', department: 'Mechanical Engineering', year: 2, classIds: ['C3'], profilePhotoUrl: "public/images/Red heist.jpg" },
+  { id: '5', name: 'Sathya', email: 'student3@mail.com', role: Role.STUDENT, password: 'password123', rollNo: 'S003', department: 'Computer Science', year: 3, classIds: ['C1'], profilePhotoUrl: "public/images/wallpaper1.avif" },
 
 ];
 
