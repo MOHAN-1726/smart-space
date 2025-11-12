@@ -1,4 +1,4 @@
-import { Role, User, NoDueRequest, OnDutyRequest, Assignment, Attendance, Feedback, Notification, RequestStatus, AttendanceStatus, NotificationType, Message, Announcement, Class, ClassMembership, Event, Section, LeaveRequest, ClassMaterial } from './types';
+import { Role, User, NoDueRequest, OnDutyRequest, Assignment, Attendance, Feedback, Notification, RequestStatus, AttendanceStatus, NotificationType, Message, Announcement, Class, ClassMembership, Event, Section, LeaveRequest, ClassMaterial, Exam, ExamMark, MarkComment } from './types';
 
 export const MOCK_CLASSES: Class[] = [
   { id: 'C1', name: 'CS101: Intro to Computer Science', description: 'Fundamental concepts of programming and computer science.' },
@@ -27,11 +27,11 @@ export const MOCK_CLASS_MEMBERSHIPS: ClassMembership[] = [
 ];
 
 export const MOCK_USERS: User[] = [
-  { id: '1', name: 'Mohanraj', email: 'student1@mail.com', role: Role.STUDENT, password: 'password123', rollNo: 'S001', department: 'Computer Science', year: 3, classIds: ['C1', 'C2'], profilePhotoUrl: "public/images/d7776adf-f54a-411a-8858-ecef49ff6c1a.jpeg"  },
-  { id: '2', name: 'Arthi Priyadharshini', email: 'staff1@mail.com', role: Role.STAFF, password: 'password123', staffId: 'T001', designation: 'Professor', classIds: ['C1', 'C2', 'C3'], profilePhotoUrl: "public/images/car.jpg" },
-  { id: '3', name: 'Sivakami', email: 'parent1@mail.com', role: Role.PARENT, password: 'password123', studentId: '1', classIds: [], profilePhotoUrl: "public/images/car2.jpg" },
-  { id: '4', name: 'Akash', email: 'student2@mail.com', role: Role.STUDENT, password: 'password123', rollNo: 'S002', department: 'Mechanical Engineering', year: 2, classIds: ['C3'], profilePhotoUrl: "public/images/Red heist.jpg" },
-  { id: '5', name: 'Sathya', email: 'student3@mail.com', role: Role.STUDENT, password: 'password123', rollNo: 'S003', department: 'Computer Science', year: 3, classIds: ['C1'], profilePhotoUrl: "public/images/wallpaper1.avif" },
+  { id: '1', name: 'Mohanraj', email: 'student1@mail.com', role: Role.STUDENT, password: 'password123', rollNo: 'S001', department: 'Computer Science', year: 3, classIds: ['C1', 'C2'], profilePhotoUrl: `https://i.pravatar.cc/150?u=1` },
+  { id: '2', name: 'Arthi Priyadharshini', email: 'staff1@mail.com', role: Role.STAFF, password: 'password123', staffId: 'T001', designation: 'Professor', classIds: ['C1', 'C2', 'C3'], profilePhotoUrl: `https://i.pravatar.cc/150?u=2` },
+  { id: '3', name: 'Sivakami', email: 'parent1@mail.com', role: Role.PARENT, password: 'password123', studentId: '1', classIds: [], profilePhotoUrl: `https://i.pravatar.cc/150?u=3` },
+  { id: '4', name: 'Akash', email: 'student2@mail.com', role: Role.STUDENT, password: 'password123', rollNo: 'S002', department: 'Mechanical Engineering', year: 2, classIds: ['C3'], profilePhotoUrl: `https://i.pravatar.cc/150?u=4` },
+  { id: '5', name: 'Sathya', email: 'student3@mail.com', role: Role.STUDENT, password: 'password123', rollNo: 'S003', department: 'Computer Science', year: 3, classIds: ['C1'], profilePhotoUrl: `https://i.pravatar.cc/150?u=5` },
 
 ];
 
@@ -145,4 +145,23 @@ export const MOCK_CLASS_MATERIALS: ClassMaterial[] = [
     uploadedByName: 'Arthi Priyadharshini',
     uploadDate: '2023-10-25',
   },
+];
+
+export const MOCK_EXAMS: Exam[] = [
+  { id: 'EX001', classId: 'C1', name: 'Midterm Exam', date: '2023-11-20', totalMarks: 100, paperUrl: '/papers/cs101_midterm.pdf' },
+  { id: 'EX002', classId: 'C2', name: 'Final Exam', date: '2023-12-15', totalMarks: 100, paperUrl: '/papers/cs301_final.pdf' },
+  { id: 'EX003', classId: 'C1', name: 'Quiz 1', date: '2023-10-15', totalMarks: 20, paperUrl: '/papers/cs101_quiz1.pdf' },
+];
+
+export const MOCK_EXAM_MARKS: ExamMark[] = [
+  { id: 'EM001', examId: 'EX001', studentId: '1', marksObtained: 85, answerSheetUrl: '/sheets/mohanraj_cs101_midterm.pdf' },
+  { id: 'EM002', examId: 'EX001', studentId: '5', marksObtained: 78 },
+  { id: 'EM003', examId: 'EX002', studentId: '1', marksObtained: 92, answerSheetUrl: '/sheets/mohanraj_cs301_final.pdf' },
+  { id: 'EM004', examId: 'EX003', studentId: '1', marksObtained: 18 },
+  { id: 'EM005', examId: 'EX003', studentId: '5', marksObtained: 15 },
+];
+
+export const MOCK_MARK_COMMENTS: MarkComment[] = [
+    { id: 'MC001', markId: 'EM001', userId: '3', comment: "Could we discuss this result? I was expecting a bit higher.", timestamp: '2023-11-22T10:00:00Z' },
+    { id: 'MC002', markId: 'EM001', userId: '2', comment: "Of course, please schedule a meeting through the portal's parent-teacher connect.", timestamp: '2023-11-22T11:30:00Z' },
 ];

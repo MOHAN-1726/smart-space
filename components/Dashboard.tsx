@@ -1,8 +1,8 @@
 import React, { useState, ReactNode, useEffect, useMemo, useRef, useCallback } from 'react';
-import { User, Role, RequestStatus, NoDueRequest, OnDutyRequest, Assignment, Attendance, Feedback, Notification, AttendanceStatus, Message, Announcement, NotificationType, Class, ClassMembership, SubmittedFile, Event, Section, LeaveRequest, ClassMaterial } from '../types';
-import { MOCK_USERS, MOCK_NODUE_REQUESTS, MOCK_ONDUTY_REQUESTS, MOCK_ASSIGNMENTS, MOCK_ATTENDANCE, MOCK_FEEDBACK, MOCK_NOTIFICATIONS, MOCK_MESSAGES, MOCK_ANNOUNCEMENTS, MOCK_CLASSES, MOCK_CLASS_MEMBERSHIPS, MOCK_EVENTS, MOCK_SECTIONS, MOCK_LEAVE_REQUESTS, MOCK_CLASS_MATERIALS } from '../constants';
+import { User, Role, RequestStatus, NoDueRequest, OnDutyRequest, Assignment, Attendance, Feedback, Notification, AttendanceStatus, Message, Announcement, NotificationType, Class, ClassMembership, SubmittedFile, Event, Section, LeaveRequest, ClassMaterial, Exam, ExamMark, MarkComment } from '../types';
+import { MOCK_USERS, MOCK_NODUE_REQUESTS, MOCK_ONDUTY_REQUESTS, MOCK_ASSIGNMENTS, MOCK_ATTENDANCE, MOCK_FEEDBACK, MOCK_NOTIFICATIONS, MOCK_MESSAGES, MOCK_ANNOUNCEMENTS, MOCK_CLASSES, MOCK_CLASS_MEMBERSHIPS, MOCK_EVENTS, MOCK_SECTIONS, MOCK_LEAVE_REQUESTS, MOCK_CLASS_MATERIALS, MOCK_EXAMS, MOCK_EXAM_MARKS, MOCK_MARK_COMMENTS } from '../constants';
 import { Card, Button, StatusBadge, ConfirmationDialog, Modal, ProfilePicture } from './UI';
-import { HomeIcon, AttendanceIcon, AssignmentIcon, RequestIcon, FeedbackIcon, NotificationIcon, LogoutIcon, MenuIcon, CloseIcon, ApproveIcon, RejectIcon, UserIcon, SortAscIcon, SortDescIcon, UploadIcon, MessageIcon, SendIcon, AnnouncementIcon, ReplyIcon, ClassIcon, SunIcon, MoonIcon, SpinnerIcon, SearchIcon, EyeIcon, EditIcon, CalendarIcon, ChevronLeftIcon, ChevronRightIcon, TrashIcon, GraduationCapIcon, KeyIcon, SparklesIcon, LeaveIcon, DocumentTextIcon, BookOpenIcon } from './Icons';
+import { HomeIcon, AttendanceIcon, AssignmentIcon, RequestIcon, FeedbackIcon, NotificationIcon, LogoutIcon, MenuIcon, CloseIcon, ApproveIcon, RejectIcon, UserIcon, SortAscIcon, SortDescIcon, UploadIcon, MessageIcon, SendIcon, AnnouncementIcon, ReplyIcon, ClassIcon, SunIcon, MoonIcon, SpinnerIcon, SearchIcon, EyeIcon, EditIcon, CalendarIcon, ChevronLeftIcon, ChevronRightIcon, TrashIcon, GraduationCapIcon, KeyIcon, SparklesIcon, LeaveIcon, DocumentTextIcon, BookOpenIcon, ClipboardCheckIcon } from './Icons';
 import ManageClassesView from './ManageClassesView';
 
 interface DashboardProps {
@@ -2537,6 +2537,304 @@ const MaterialsView: React.FC<{
   );
 };
 
+const ExamsView: React.FC<{
+  user: User;
+  selectedClassId: string | null;
+  exams: Exam[];
+  setExams: React.Dispatch<React.SetStateAction<Exam[]>>;
+  examMarks: ExamMark[];
+  setExamMarks: React.Dispatch<React.SetStateAction<ExamMark[]>>;
+  markComments: MarkComment[];
+  setMarkComments: React.Dispatch<React.SetStateAction<MarkComment[]>>;
+  classes: Class[];
+  classMemberships: ClassMembership[];
+  allUsers: User[];
+}> = ({ user, selectedClassId, exams, setExams, examMarks, setExamMarks, markComments, setMarkComments, classes, classMemberships, allUsers }) => {
+  const [selectedExam, setSelectedExam] = useState<Exam | null>(null);
+  const [isExamModalOpen, setIsExamModalOpen] = useState(false);
+  const [editingExam, setEditingExam] = useState<Exam | null>(null);
+  const [examName, setExamName] = useState('');
+  const [examDate, setExamDate] = useState('');
+  const [examTotalMarks, setExamTotalMarks] = useState(100);
+  const [examPaperFile, setExamPaperFile] = useState<File | null>(null);
+  const [marksToSave, setMarksToSave] = useState<Map<string, number | null>>(new Map());
+  const [answerSheetsToSave, setAnswerSheetsToSave] = useState<Map<string, File>>(new Map());
+  const [viewingCommentsFor, setViewingCommentsFor] = useState<ExamMark | null>(null);
+  const [newComment, setNewComment] = useState('');
+  
+  const studentId = user.role === Role.PARENT ? user.studentId : user.id;
+
+  const filteredExams = useMemo(() => {
+    if (!selectedClassId || selectedClassId === 'ALL') return [];
+    return exams.filter(e => e.classId === selectedClassId)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [exams, selectedClassId]);
+
+  const studentsInClass = useMemo(() => {
+    if (!selectedClassId) return [];
+    const studentIds = classMemberships
+        .filter(cm => cm.classId === selectedClassId && cm.role === Role.STUDENT)
+        .map(cm => cm.userId);
+    return allUsers.filter(u => studentIds.includes(u.id)).sort((a,b) => a.name.localeCompare(b.name));
+  }, [selectedClassId, classMemberships, allUsers]);
+
+  useEffect(() => {
+    if (selectedExam && user.role === Role.STAFF) {
+        const initialMarks = new Map();
+        studentsInClass.forEach(student => {
+            const mark = examMarks.find(m => m.examId === selectedExam.id && m.studentId === student.id);
+            initialMarks.set(student.id, mark ? mark.marksObtained : null);
+        });
+        setMarksToSave(initialMarks);
+        setAnswerSheetsToSave(new Map());
+    }
+  }, [selectedExam, studentsInClass, examMarks, user.role]);
+
+  const handleExamModalOpen = (exam: Exam | null = null) => {
+    setEditingExam(exam);
+    if (exam) {
+        setExamName(exam.name);
+        setExamDate(exam.date);
+        setExamTotalMarks(exam.totalMarks);
+    } else {
+        setExamName('');
+        setExamDate(new Date().toISOString().split('T')[0]);
+        setExamTotalMarks(100);
+    }
+    setExamPaperFile(null);
+    setIsExamModalOpen(true);
+  };
+
+  const handleExamSubmit = () => {
+    if (!examName || !examDate || !selectedClassId || selectedClassId === 'ALL') {
+        alert("Please fill all required fields.");
+        return;
+    }
+
+    if (editingExam) {
+        setExams(exams.map(e => e.id === editingExam.id ? { ...e, name: examName, date: examDate, totalMarks: examTotalMarks, paperUrl: examPaperFile ? URL.createObjectURL(examPaperFile) : e.paperUrl } : e));
+    } else {
+        const newExam: Exam = {
+            id: `EX${Date.now()}`,
+            classId: selectedClassId,
+            name: examName,
+            date: examDate,
+            totalMarks: examTotalMarks,
+            paperUrl: examPaperFile ? URL.createObjectURL(examPaperFile) : undefined,
+        };
+        setExams(prev => [newExam, ...prev]);
+    }
+    setIsExamModalOpen(false);
+  };
+
+  const handleSaveMarksAndSheets = () => {
+    if (!selectedExam) return;
+
+    const updatedMarksList = examMarks.filter(m => m.examId !== selectedExam.id);
+
+    studentsInClass.forEach(student => {
+        const marks = marksToSave.get(student.id);
+        const sheetFile = answerSheetsToSave.get(student.id);
+        const existingMark = examMarks.find(m => m.examId === selectedExam.id && m.studentId === student.id);
+
+        if (marks !== null && marks !== undefined) { // If marks are entered
+            if (existingMark) {
+                updatedMarksList.push({
+                    ...existingMark,
+                    marksObtained: marks,
+                    answerSheetUrl: sheetFile ? URL.createObjectURL(sheetFile) : existingMark.answerSheetUrl
+                });
+            } else {
+                updatedMarksList.push({
+                    id: `EM${Date.now()}${student.id}`,
+                    examId: selectedExam.id,
+                    studentId: student.id,
+                    marksObtained: marks,
+                    answerSheetUrl: sheetFile ? URL.createObjectURL(sheetFile) : undefined,
+                });
+            }
+        } else if (sheetFile) { // If only sheet is uploaded without marks yet
+             if (existingMark) {
+                updatedMarksList.push({ ...existingMark, answerSheetUrl: URL.createObjectURL(sheetFile) });
+            } else {
+                 updatedMarksList.push({
+                    id: `EM${Date.now()}${student.id}`,
+                    examId: selectedExam.id,
+                    studentId: student.id,
+                    marksObtained: null,
+                    answerSheetUrl: URL.createObjectURL(sheetFile),
+                });
+            }
+        } else if (existingMark) {
+            updatedMarksList.push(existingMark);
+        }
+    });
+    
+    setExamMarks(updatedMarksList);
+    setAnswerSheetsToSave(new Map());
+    alert("Marks and sheets saved successfully!");
+  };
+
+  const handleAddComment = () => {
+    if (!newComment.trim() || !viewingCommentsFor) return;
+    const newComm: MarkComment = {
+        id: `MC${Date.now()}`,
+        markId: viewingCommentsFor.id,
+        userId: user.id,
+        comment: newComment,
+        timestamp: new Date().toISOString(),
+    };
+    setMarkComments(prev => [...prev, newComm]);
+    setNewComment('');
+  };
+
+  if (!selectedClassId || selectedClassId === 'ALL') {
+    return <Card className="animate-scaleIn"><p>Please select a class to view exams and marks.</p></Card>;
+  }
+
+  if (selectedExam) {
+    const userMark = (user.role === Role.STUDENT || user.role === Role.PARENT) ? examMarks.find(m => m.examId === selectedExam.id && m.studentId === studentId) : null;
+    return (
+        <div className="animate-fadeIn">
+            <button onClick={() => setSelectedExam(null)} className="mb-4 flex items-center gap-2 text-sm font-semibold text-blue-600 hover:underline">
+                <ChevronLeftIcon className="w-4 h-4" /> Back to Exam List
+            </button>
+            <Card>
+                <div className="flex justify-between items-start">
+                    <div>
+                        <h2 className="text-2xl font-bold">{selectedExam.name}</h2>
+                        <p className="text-slate-500">Date: {selectedExam.date} | Total Marks: {selectedExam.totalMarks}</p>
+                    </div>
+                    {selectedExam.paperUrl && <Button onClick={() => window.open(selectedExam.paperUrl, '_blank')}>Download Paper</Button>}
+                </div>
+
+                <div className="mt-6">
+                    <h3 className="text-lg font-semibold mb-2">Marks</h3>
+                    {user.role === Role.STAFF ? (
+                        <>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                                <thead className="text-left bg-slate-50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-400">
+                                    <tr>
+                                        <th className="p-2">Student</th>
+                                        <th className="p-2">Marks Obtained</th>
+                                        <th className="p-2">Answer Sheet</th>
+                                        <th className="p-2 text-center">Comments</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {studentsInClass.map(student => {
+                                        const mark = examMarks.find(m => m.examId === selectedExam.id && m.studentId === student.id);
+                                        const uploadedFile = answerSheetsToSave.get(student.id);
+                                        return (
+                                            <tr key={student.id} className="border-t dark:border-slate-700">
+                                                <td className="p-2">{student.name} ({student.rollNo})</td>
+                                                <td className="p-2">
+                                                    <input type="number" value={marksToSave.get(student.id) ?? ''} onChange={e => {
+                                                        const newMarks = new Map(marksToSave);
+                                                        const value = e.target.value;
+                                                        const marksNum = value === '' ? null : Number(value);
+                                                        if (marksNum === null || (!isNaN(marksNum) && marksNum >= 0 && marksNum <= selectedExam.totalMarks)) {
+                                                            newMarks.set(student.id, marksNum);
+                                                            setMarksToSave(newMarks);
+                                                        }
+                                                    }} className="w-24 p-1 rounded bg-slate-100 dark:bg-slate-700 border" />
+                                                    <span> / {selectedExam.totalMarks}</span>
+                                                </td>
+                                                <td className="p-2">
+                                                    {mark?.answerSheetUrl && !uploadedFile ? (
+                                                        <a href={mark.answerSheetUrl} target="_blank" rel="noreferrer" className="text-blue-500 hover:underline text-xs">View Uploaded</a>
+                                                    ): null}
+                                                    <input type="file" id={`sheet-${student.id}`} className="hidden" onChange={e => e.target.files?.[0] && setAnswerSheetsToSave(prev => new Map(prev.set(student.id, e.target.files![0])))} />
+                                                    <label htmlFor={`sheet-${student.id}`} className="ml-2 text-xs cursor-pointer bg-slate-200 dark:bg-slate-600 px-2 py-1 rounded-md hover:bg-slate-300">
+                                                        {uploadedFile ? uploadedFile.name : (mark?.answerSheetUrl ? 'Replace' : 'Upload')}
+                                                    </label>
+                                                </td>
+                                                <td className="p-2 text-center">
+                                                    <Button size="sm" variant="secondary" onClick={() => mark && setViewingCommentsFor(mark)} disabled={!mark}>View</Button>
+                                                </td>
+                                            </tr>
+                                        )
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div className="mt-4 flex justify-end">
+                            <Button onClick={handleSaveMarksAndSheets}>Save All</Button>
+                        </div>
+                        </>
+                    ) : (
+                        <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-lg space-y-3">
+                           <p><strong>Marks Obtained:</strong> {userMark ? `${userMark.marksObtained} / ${selectedExam.totalMarks}` : 'Not Marked Yet'}</p>
+                           {userMark?.answerSheetUrl && <a href={userMark.answerSheetUrl} target="_blank" rel="noreferrer"><Button variant='secondary'>Download Answer Sheet</Button></a>}
+                           {userMark && <Button onClick={() => setViewingCommentsFor(userMark)}>View/Add Comments</Button>}
+                        </div>
+                    )}
+                </div>
+            </Card>
+        </div>
+    );
+  }
+
+  return (
+    <>
+    <Card className="animate-scaleIn">
+        <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">Exams for {classes.find(c => c.id === selectedClassId)?.name}</h2>
+            {user.role === Role.STAFF && <Button onClick={() => handleExamModalOpen()}>Create Exam</Button>}
+        </div>
+        <div className="space-y-4">
+            {filteredExams.map(exam => (
+                <div key={exam.id} className="p-4 rounded-lg bg-slate-50 dark:bg-slate-800/50 flex justify-between items-center">
+                    <div>
+                        <p className="font-semibold text-slate-800 dark:text-slate-200">{exam.name}</p>
+                        <p className="text-sm text-slate-500">Date: {exam.date} | Total Marks: {exam.totalMarks}</p>
+                    </div>
+                    <div className="flex gap-2">
+                        {user.role === Role.STAFF && <Button variant="secondary" size="sm" onClick={() => handleExamModalOpen(exam)}>Edit</Button>}
+                        <Button size="sm" onClick={() => setSelectedExam(exam)}>View Marks</Button>
+                    </div>
+                </div>
+            ))}
+            {filteredExams.length === 0 && <p className="text-center text-slate-500 py-8">No exams found for this class.</p>}
+        </div>
+    </Card>
+
+    <Modal isOpen={isExamModalOpen} onClose={() => setIsExamModalOpen(false)} title={editingExam ? "Edit Exam" : "Create Exam"} footer={<><Button variant="secondary" onClick={() => setIsExamModalOpen(false)}>Cancel</Button><Button onClick={handleExamSubmit}>Save</Button></>}>
+        <div className="space-y-4">
+            <div><label className="block text-sm font-medium mb-1">Name</label><input type="text" value={examName} onChange={e => setExamName(e.target.value)} className={inputClasses}/></div>
+            <div><label className="block text-sm font-medium mb-1">Date</label><input type="date" value={examDate} onChange={e => setExamDate(e.target.value)} className={inputClasses}/></div>
+            <div><label className="block text-sm font-medium mb-1">Total Marks</label><input type="number" value={examTotalMarks} onChange={e => setExamTotalMarks(Number(e.target.value))} className={inputClasses}/></div>
+            <div><label className="block text-sm font-medium mb-1">Question Paper (Optional)</label><input type="file" onChange={e => setExamPaperFile(e.target.files ? e.target.files[0] : null)} className="mt-1 block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/></div>
+        </div>
+    </Modal>
+    
+    <Modal isOpen={!!viewingCommentsFor} onClose={() => setViewingCommentsFor(null)} title="Comments" footer={<Button onClick={() => setViewingCommentsFor(null)}>Close</Button>}>
+        <div className="space-y-4 max-h-72 overflow-y-auto p-1">
+            {markComments.filter(c => c.markId === viewingCommentsFor?.id).length > 0 ? markComments.filter(c => c.markId === viewingCommentsFor?.id).map(comment => {
+                const commenter = allUsers.find(u => u.id === comment.userId);
+                return (
+                    <div key={comment.id} className="p-3 bg-slate-100 dark:bg-slate-700 rounded-md">
+                        <div className="flex justify-between items-center text-xs text-slate-500 dark:text-slate-400">
+                           <span className="font-semibold">{commenter?.name} ({commenter?.role.toLowerCase()})</span>
+                           <span>{new Date(comment.timestamp).toLocaleString()}</span>
+                        </div>
+                        <p className="mt-1 text-sm">{comment.comment}</p>
+                    </div>
+                )
+            }) : <p className="text-sm text-slate-500 text-center py-4">No comments yet.</p>}
+        </div>
+        <div className="mt-4 border-t dark:border-slate-700 pt-4">
+            <h4 className="font-semibold mb-2">Add a comment</h4>
+            <textarea rows={3} value={newComment} onChange={e => setNewComment(e.target.value)} className={inputClasses} placeholder="Type your comment or re-evaluation request..."/>
+            <div className="text-right mt-2">
+                <Button onClick={handleAddComment}>Post Comment</Button>
+            </div>
+        </div>
+    </Modal>
+    </>
+  );
+};
 
 const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, theme, toggleTheme, updateUser, allUsers, onUpdateAllUsers }) => {
   const [activeView, setActiveView] = useState('overview');
@@ -2559,6 +2857,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, theme, toggleThem
   
   const [events, setEvents] = useState<Event[]>(MOCK_EVENTS);
   const [classMaterials, setClassMaterials] = useState<ClassMaterial[]>(MOCK_CLASS_MATERIALS);
+  const [exams, setExams] = useState<Exam[]>(MOCK_EXAMS);
+  const [examMarks, setExamMarks] = useState<ExamMark[]>(MOCK_EXAM_MARKS);
+  const [markComments, setMarkComments] = useState<MarkComment[]>(MOCK_MARK_COMMENTS);
   
   const onUpdateUser = (updatedUser: User) => {
     onUpdateAllUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
@@ -2914,6 +3215,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, theme, toggleThem
     { name: 'Manage Classes', icon: GraduationCapIcon, view: 'manageClasses', roles: [Role.STAFF] },
     { name: 'Manage Requests', icon: DocumentTextIcon, view: 'allRequests', roles: [Role.STAFF] },
     { name: 'Assignments', icon: AssignmentIcon, view: 'assignments' },
+    { name: 'Exams & Marks', icon: ClipboardCheckIcon, view: 'exams' },
     { name: 'Class Materials', icon: BookOpenIcon, view: 'materials' },
     { name: 'Attendance', icon: AttendanceIcon, view: 'attendance' },
     { name: 'My Requests', icon: RequestIcon, view: 'requests', roles: [Role.STUDENT, Role.PARENT] },
@@ -2931,9 +3233,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, theme, toggleThem
       case 'overview': return <OverviewContent user={user} setActiveView={setActiveView} selectedClassId={selectedClassId} classes={classes} />;
       case 'classDashboard': return <ClassDashboardView user={user} selectedClassId={selectedClassId} setActiveView={setActiveView} classes={classes} classMemberships={classMemberships} />;
       case 'manageClasses': return <ManageClassesView user={user} classes={classes} sections={sections} classMemberships={classMemberships} allUsers={allUsers} onCreateClass={handleCreateClass} onAddStudents={handleAddStudentsToClass} onRemoveStudent={handleRemoveStudentFromClass} onUpdateClass={handleUpdateClass} onDeleteClass={handleDeleteClass} onCreateSection={handleCreateSection} onUpdateSection={handleUpdateSection} onDeleteSection={handleDeleteSection} onAssignStudentToSection={handleAssignStudentToSection} />;
-      // Fix: Complete the switch case for 'allRequests'
       case 'allRequests': return <AllRequestsView onDutyRequests={onDutyRequests} leaveRequests={leaveRequests} onUpdateOnDuty={handleUpdateOnDutyRequestStatus} onUpdateLeave={handleUpdateLeaveRequestStatus} />;
       case 'assignments': return <AssignmentView user={user} selectedClassId={selectedClassId} assignments={assignments} setAssignments={setAssignments} notifications={notifications} setNotifications={setNotifications} allUsers={allUsers} classMemberships={classMemberships} classes={classes} />;
+      case 'exams': return <ExamsView user={user} selectedClassId={selectedClassId} exams={exams} setExams={setExams} examMarks={examMarks} setExamMarks={setExamMarks} markComments={markComments} setMarkComments={setMarkComments} classes={classes} classMemberships={classMemberships} allUsers={allUsers} />;
       case 'materials': return <MaterialsView user={user} selectedClassId={selectedClassId} materials={classMaterials} setMaterials={setClassMaterials} classes={classes} setAnnouncements={setAnnouncements} />;
       case 'attendance': return <AttendanceView user={user} selectedClassId={selectedClassId} attendance={attendance} classMemberships={classMemberships} allUsers={allUsers} onMarkAttendance={handleMarkAttendance} />;
       case 'requests': return <RequestsView user={user} onDutyRequests={onDutyRequests} noDueRequests={noDueRequests} leaveRequests={leaveRequests} onAddNoDueRequest={handleAddNewNoDueRequest} onUpdateNoDueRequestStatus={handleUpdateNoDueRequestStatus} onUpdateOnDutyRequestStatus={handleUpdateOnDutyRequestStatus} onUpdateLeaveRequestStatus={handleUpdateLeaveRequestStatus} onAddLeaveRequest={handleAddNewLeaveRequest} />;
@@ -2947,7 +3249,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, theme, toggleThem
     }
   };
 
-  // Fix: Add return statement to the Dashboard component
   return (
     <div className="flex h-screen bg-slate-100 dark:bg-slate-900 overflow-hidden">
       {/* Sidebar */}
@@ -2992,7 +3293,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, theme, toggleThem
             
             <div className="flex items-center gap-2 sm:gap-4">
                 {/* Class Selector */}
-                {(user.role !== Role.PARENT) && ['overview', 'classDashboard', 'assignments', 'materials', 'attendance', 'messages'].includes(activeView) && (
+                {(user.role !== Role.PARENT) && ['overview', 'classDashboard', 'assignments', 'materials', 'attendance', 'messages', 'exams'].includes(activeView) && (
                     <select value={selectedClassId || ''} onChange={e => setSelectedClassId(e.target.value)} className="p-2 border rounded-lg bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 focus:outline-none text-sm max-w-[150px] sm:max-w-xs">
                         {user.role === Role.STAFF && <option value="ALL">All Classes</option>}
                         {(user.role === Role.STAFF ? classes : studentClasses).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}

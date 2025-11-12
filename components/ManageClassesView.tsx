@@ -41,6 +41,8 @@ const ManageClassesView: React.FC<ManageClassesViewProps> = (props) => {
   } = props;
   
   const [selectedClass, setSelectedClass] = useState<Class | null>(null);
+  const [studentSearchTerm, setStudentSearchTerm] = useState('');
+  const [filterSectionId, setFilterSectionId] = useState<'all' | 'unassigned' | string>('all');
 
   // Modals visibility state
   const [isClassModalOpen, setIsClassModalOpen] = useState(false);
@@ -82,6 +84,12 @@ const ManageClassesView: React.FC<ManageClassesViewProps> = (props) => {
         setSectionName('');
     }
   }, [editingSection]);
+
+  useEffect(() => {
+    // Reset filters when the selected class changes
+    setStudentSearchTerm('');
+    setFilterSectionId('all');
+  }, [selectedClass?.id]);
 
   const resetFormState = () => {
     setClassName('');
@@ -192,6 +200,40 @@ const ManageClassesView: React.FC<ManageClassesViewProps> = (props) => {
   }, [allUsers, classMemberships, selectedClass, searchTerm]);
 
   const classSections = useMemo(() => sections.filter(s => s.classId === selectedClass?.id), [sections, selectedClass]);
+
+  const filteredMembershipsInClass = useMemo(() => {
+    if (!selectedClass) return [];
+
+    const membershipsInClass = classMemberships.filter(cm => cm.classId === selectedClass.id && cm.role === Role.STUDENT);
+
+    // Fix: Explicitly type the Map to ensure correct type inference for `student`.
+    const studentMap = new Map<string, User>(allUsers.map(u => [u.id, u]));
+
+    return membershipsInClass.filter(cm => {
+        const student = studentMap.get(cm.userId);
+        if (!student) return false;
+
+        // Section filter
+        if (filterSectionId !== 'all') {
+            if (filterSectionId === 'unassigned' && cm.sectionId) {
+                return false;
+            }
+            if (filterSectionId !== 'unassigned' && cm.sectionId !== filterSectionId) {
+                return false;
+            }
+        }
+
+        // Search filter
+        if (studentSearchTerm) {
+            const lowerSearch = studentSearchTerm.toLowerCase();
+            if (!student.name.toLowerCase().includes(lowerSearch) && !(student.rollNo && student.rollNo.toLowerCase().includes(lowerSearch))) {
+                return false;
+            }
+        }
+
+        return true;
+    });
+  }, [selectedClass, classMemberships, allUsers, filterSectionId, studentSearchTerm]);
   
   const renderClassList = () => (
     <Card className="animate-scaleIn">
@@ -232,10 +274,6 @@ const ManageClassesView: React.FC<ManageClassesViewProps> = (props) => {
 
   const renderClassDetail = () => {
     if (!selectedClass) return null;
-    
-    const membershipsInClass = classMemberships.filter(cm => cm.classId === selectedClass.id && cm.role === Role.STUDENT);
-    
-    const unassignedMemberships = membershipsInClass.filter(cm => !cm.sectionId);
 
     return (
       <div className="animate-fadeIn">
@@ -256,9 +294,38 @@ const ManageClassesView: React.FC<ManageClassesViewProps> = (props) => {
           </div>
         </Card>
         
+        <Card className="mt-6">
+            <div className="flex flex-col md:flex-row gap-4">
+                <div className="relative flex-1">
+                    <input
+                        type="text"
+                        placeholder="Search students in this class by name or roll no..."
+                        value={studentSearchTerm}
+                        onChange={(e) => setStudentSearchTerm(e.target.value)}
+                        className={searchInputClasses}
+                    />
+                    <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                </div>
+                <div className="flex-1 md:max-w-xs">
+                    <select
+                        value={filterSectionId}
+                        onChange={(e) => setFilterSectionId(e.target.value)}
+                        className={inputClasses}
+                    >
+                        <option value="all">Filter by Section: All</option>
+                        {classSections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        <option value="unassigned">Unassigned</option>
+                    </select>
+                </div>
+            </div>
+        </Card>
+        
         <div className="mt-6 space-y-6">
           {classSections.map(section => {
-              const sectionMemberships = membershipsInClass.filter(cm => cm.sectionId === section.id);
+              if (filterSectionId !== 'all' && filterSectionId !== section.id) return null;
+              
+              const sectionMemberships = filteredMembershipsInClass.filter(cm => cm.sectionId === section.id);
+
               return (
                 <Card key={section.id} title={section.name}>
                     <div className="flex justify-end gap-2 -mt-12 mb-4">
@@ -271,12 +338,14 @@ const ManageClassesView: React.FC<ManageClassesViewProps> = (props) => {
               );
           })}
           
-           <Card title="Unassigned Students">
+           {(filterSectionId === 'all' || filterSectionId === 'unassigned') && (
+            <Card title="Unassigned Students">
                 <div className="flex justify-end gap-2 -mt-12 mb-4">
                     <Button variant="secondary" size="sm" onClick={() => handleAddStudentModalOpen(null)}>Add Students</Button>
                 </div>
-                <StudentListTable memberships={unassignedMemberships} onRemove={setMembershipToRemove} sections={classSections} onAssignStudentToSection={onAssignStudentToSection} />
+                <StudentListTable memberships={filteredMembershipsInClass.filter(cm => !cm.sectionId)} onRemove={setMembershipToRemove} sections={classSections} onAssignStudentToSection={onAssignStudentToSection} />
             </Card>
+           )}
         </div>
       </div>
     );
@@ -289,7 +358,7 @@ const ManageClassesView: React.FC<ManageClassesViewProps> = (props) => {
     onAssignStudentToSection: (membershipId: string, sectionId: string | null) => void;
   }> = ({ memberships, onRemove, sections, onAssignStudentToSection }) => {
     if (memberships.length === 0) {
-      return <p className="text-center text-slate-500 dark:text-slate-400 py-8">No students in this section.</p>;
+      return <p className="text-center text-slate-500 dark:text-slate-400 py-8">No students found.</p>;
     }
     return (
       <div className="overflow-x-auto">

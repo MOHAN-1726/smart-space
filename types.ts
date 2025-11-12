@@ -185,3 +185,28 @@ export interface ClassMaterial {
   uploadedByName: string;
   uploadDate: string; // ISO Date string
 }
+
+export interface Exam {
+  id: string;
+  classId: string;
+  name: string;
+  date: string; // ISO Date string
+  totalMarks: number;
+  paperUrl?: string; // URL to the question paper PDF
+}
+
+export interface ExamMark {
+  id: string;
+  examId: string;
+  studentId: string;
+  marksObtained: number | null; // Can be null if not marked yet
+  answerSheetUrl?: string;
+}
+
+export interface MarkComment {
+  id: string;
+  markId: string;
+  userId: string; // ID of the commenter (student, parent, or staff)
+  comment: string;
+  timestamp: string; // ISO datetime string
+}
