@@ -1,18 +1,18 @@
 import React, { useState } from 'react';
 import { Button, Card } from './UI';
 import { Role } from '../types';
+import { 
+  useLoginMutation, 
+  useRegisterMutation, 
+  useForgotPasswordMutation,
+  useResetPasswordMutation,
+  useVerifyEmailMutation,
+  useResendVerificationMutation,
+} from '../src/services/api';
+import { useDispatch } from 'react-redux';
+import { loginSuccess } from '../src/store/authSlice';
 
-interface LoginProps {
-  onLogin: (email: string, password: string) => { success: boolean; message: string; verificationRequired?: boolean; };
-  onRegister: (name: string, email: string, role: Role, password: string) => { success: boolean; message: string };
-  onCheckUser: (email: string) => boolean;
-  onPasswordReset: (email: string, newPassword: string) => boolean;
-  onVerifyAndLogin: (otp: string) => { success: boolean; message: string };
-  onResendOtp: () => { success: boolean; message: string };
-  verificationEmail: string | null;
-}
-
-const Login: React.FC<LoginProps> = ({ onLogin, onRegister, onCheckUser, onPasswordReset, onVerifyAndLogin, onResendOtp, verificationEmail }) => {
+const Login: React.FC = () => {
   type View = 'login' | 'register' | 'forgotPassword' | 'resetPassword' | 'verifyEmail';
   const [view, setView] = useState<View>('login');
   
@@ -28,6 +28,8 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, onCheckUser, onPassw
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
   const [regRole, setRegRole] = useState<Role>(Role.STUDENT);
   const [regError, setRegError] = useState('');
+  const [regSuccess, setRegSuccess] = useState('');
+
 
   // Forgot Password state
   const [forgotEmail, setForgotEmail] = useState('');
@@ -44,23 +46,37 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, onCheckUser, onPassw
   const [verifyOtp, setVerifyOtp] = useState('');
   const [verifyError, setVerifyError] = useState('');
   const [verifySuccess, setVerifySuccess] = useState('');
+  const [emailForVerification, setEmailForVerification] = useState<string | null>(null);
+
+
+  const dispatch = useDispatch();
+  const [login, { isLoading: isLoggingIn }] = useLoginMutation();
+  const [register, { isLoading: isRegistering }] = useRegisterMutation();
+  const [forgotPassword, { isLoading: isSendingOtp }] = useForgotPasswordMutation();
+  const [resetPasswordMutation, { isLoading: isResettingPassword }] = useResetPasswordMutation();
+  const [verifyEmail, { isLoading: isVerifyingEmail }] = useVerifyEmailMutation();
+  const [resendVerification, { isLoading: isResendingOtp }] = useResendVerificationMutation();
 
   const inputClasses = "mt-1 block w-full px-3 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-blue-500 dark:focus:ring-offset-slate-900";
 
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
-    const result = onLogin(loginEmail, loginPassword);
-    if (!result.success) {
-      setLoginError(result.message);
-      if (result.verificationRequired) {
+    try {
+      const { user, accessToken, refreshToken } = await login({ email: loginEmail, password: loginPassword }).unwrap();
+      dispatch(loginSuccess({ user, accessToken, refreshToken }));
+    } catch (err: any) {
+      if (err.data?.message === 'Email not verified') {
+        setEmailForVerification(loginEmail);
         setView('verifyEmail');
+      } else {
+        setLoginError(err.data?.message || 'An unexpected error occurred');
       }
     }
   };
 
-  const handleRegisterSubmit = (e: React.FormEvent) => {
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setRegError('');
     if (regPassword !== regConfirmPassword) {
@@ -71,36 +87,32 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, onCheckUser, onPassw
         setRegError('Password must be at least 6 characters long.');
         return;
     }
-    const result = onRegister(regName, regEmail, regRole, regPassword);
-    if (!result.success) {
-      setRegError(result.message);
-    } else {
-        setView('verifyEmail');
+    try {
+        await register({ name: regName, email: regEmail, role: regRole, password: regPassword }).unwrap();
+        setRegSuccess('Registration successful! Please check your email for a verification OTP.');
+        setEmailForVerification(regEmail);
+        setTimeout(() => setView('verifyEmail'), 1000);
+    } catch (err: any) {
+        setRegError(err.data?.message || 'An error occurred during registration.');
     }
   };
 
-  const handleForgotPasswordSubmit = (e: React.FormEvent) => {
+  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setForgotError('');
     setForgotSuccess('');
-    if (onCheckUser(forgotEmail)) {
-        // In a real app, you'd send an email here.
-        // We'll simulate it by generating an OTP and moving to the next step.
-        const simulatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
-        console.log(`Simulated OTP for ${forgotEmail}: ${simulatedOtp}`);
-        setResetOtp(simulatedOtp); // For demo, we auto-fill it. In real-world, user would type this.
-        setForgotSuccess(`A password reset OTP has been sent to ${forgotEmail}. (Check console for demo OTP)`);
+    try {
+        await forgotPassword({ email: forgotEmail }).unwrap();
+        setForgotSuccess(`A password reset OTP has been sent to ${forgotEmail}.`);
         setTimeout(() => setView('resetPassword'), 1000);
-    } else {
-        setForgotError('No account found with that email address.');
+    } catch(err: any) {
+        setForgotError(err.data?.message || 'Could not send OTP. Please try again.');
     }
   };
   
-  const handleResetPasswordSubmit = (e: React.FormEvent) => {
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setResetError('');
-    // In a real app, you would validate the OTP against the one sent.
-    // For this demo, we'll just check if the field isn't empty.
     if (!resetOtp) {
         setResetError('Please enter the OTP.');
         return;
@@ -114,38 +126,52 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, onCheckUser, onPassw
         return;
     }
 
-    const success = onPasswordReset(forgotEmail, resetPassword);
-    if (success) {
+    try {
+        await resetPasswordMutation({ email: forgotEmail, otp: resetOtp, password: resetPassword }).unwrap();
         alert('Password has been reset successfully! Please log in with your new password.');
         setView('login');
         setForgotEmail('');
-        // Clear all states
-    } else {
-        setResetError('An unexpected error occurred. Please try again.');
+    } catch(err: any) {
+        setResetError(err.data?.message || 'Could not reset password. Please try again.');
     }
   };
 
-  const handleVerifySubmit = (e: React.FormEvent) => {
+  const handleVerifySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setVerifyError('');
-    const result = onVerifyAndLogin(verifyOtp);
-    if (!result.success) {
-        setVerifyError(result.message);
+    if (!emailForVerification) {
+        setVerifyError('No email to verify. Please start the process again.');
+        return;
     }
-    // on success, app will log in and redirect
+    try {
+        const { user, accessToken, refreshToken } = await verifyEmail({ email: emailForVerification, otp: verifyOtp }).unwrap();
+        dispatch(loginSuccess({ user, accessToken, refreshToken }));
+        setVerifySuccess('Email verified successfully!');
+    } catch(err: any) {
+        setVerifyError(err.data?.message || 'Invalid OTP or an error occurred.');
+    }
   };
 
-  const handleResendClick = () => {
-    const result = onResendOtp();
-    setVerifySuccess(result.message);
+  const handleResendClick = async () => {
+    if (!emailForVerification) {
+        setVerifyError('No email to resend OTP to. Please start the process again.');
+        return;
+    }
+    setVerifySuccess('');
     setVerifyError('');
-    // clear success message after a few seconds
+    try {
+        await resendVerification({ email: emailForVerification }).unwrap();
+        setVerifySuccess('A new OTP has been sent.');
+    } catch(err: any) {
+        setVerifyError(err.data?.message || 'Could not resend OTP.');
+    }
     setTimeout(() => setVerifySuccess(''), 5000);
   };
 
 
   const handleQuickLogin = (email: string) => {
-    onLogin(email, 'password123');
+    setLoginEmail(email);
+    setLoginPassword('password123');
   }
 
   const renderContent = () => {
@@ -168,10 +194,10 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, onCheckUser, onPassw
                             Forgot password?
                         </button>
                     </div>
-                  <Button type="submit" className="w-full">Sign In</Button>
+                  <Button type="submit" className="w-full" disabled={isLoggingIn}>{isLoggingIn ? 'Signing In...' : 'Sign In'}</Button>
               </form>
               <p className="mt-6 text-center text-sm text-slate-600 dark:text-slate-400">
-                Don’t have an account?{' '}
+                Don’t have an account?{' '}'''
                 <button onClick={() => { setView('register'); setLoginError(''); }} className="font-semibold text-blue-600 hover:text-blue-500">
                   Register
                 </button>
@@ -183,6 +209,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, onCheckUser, onPassw
           <Card key="register" className="!bg-white/80 dark:!bg-slate-800/60 !rounded-2xl">
               <form onSubmit={handleRegisterSubmit}>
                   {regError && <p className="text-red-500 text-sm mb-4">{regError}</p>}
+                  {regSuccess && <p className="text-green-500 text-sm mb-4">{regSuccess}</p>}
                   <div className="mb-4">
                       <label htmlFor="reg-name" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Full Name</label>
                       <input type="text" id="reg-name" value={regName} onChange={(e) => setRegName(e.target.value)} required className={inputClasses}/>
@@ -207,10 +234,10 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, onCheckUser, onPassw
                       <label htmlFor="reg-confirm-password" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Confirm Password</label>
                       <input type="password" id="reg-confirm-password" value={regConfirmPassword} onChange={(e) => setRegConfirmPassword(e.target.value)} required className={inputClasses}/>
                   </div>
-                  <Button type="submit" className="w-full">Create Account</Button>
+                  <Button type="submit" className="w-full" disabled={isRegistering}>{isRegistering ? 'Creating Account...' : 'Create Account'}</Button>
               </form>
               <p className="mt-6 text-center text-sm text-slate-600 dark:text-slate-400">
-                Already have an account?{' '}
+                Already have an account?{' '}'''
                 <button onClick={() => { setView('login'); setRegError(''); }} className="font-semibold text-blue-600 hover:text-blue-500">
                   Sign In
                 </button>
@@ -227,10 +254,10 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, onCheckUser, onPassw
                     <label htmlFor="forgot-email" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Enter your email</label>
                     <input type="email" id="forgot-email" value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)} required className={inputClasses}/>
                 </div>
-                <Button type="submit" className="w-full">Send Reset OTP</Button>
+                <Button type="submit" className="w-full" disabled={isSendingOtp}>{isSendingOtp ? 'Sending...' : 'Send Reset OTP'}</Button>
             </form>
             <p className="mt-6 text-center text-sm text-slate-600 dark:text-slate-400">
-              Remembered your password?{' '}
+              Remembered your password?{' '}'''
               <button onClick={() => { setView('login'); setForgotError(''); }} className="font-semibold text-blue-600 hover:text-blue-500">
                 Sign In
               </button>
@@ -255,7 +282,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, onCheckUser, onPassw
                     <label htmlFor="reset-confirm-password" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Confirm New Password</label>
                     <input type="password" id="reset-confirm-password" value={resetConfirmPassword} onChange={(e) => setResetConfirmPassword(e.target.value)} required className={inputClasses}/>
                 </div>
-                <Button type="submit" className="w-full">Reset Password</Button>
+                <Button type="submit" className="w-full" disabled={isResettingPassword}>{isResettingPassword ? 'Resetting...' : 'Reset Password'}</Button>
             </form>
           </Card>
         );
@@ -264,9 +291,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, onCheckUser, onPassw
           <Card key="verify" className="!bg-white/80 dark:!bg-slate-800/60 !rounded-2xl">
             <form onSubmit={handleVerifySubmit}>
               <p className="text-sm text-center text-slate-600 dark:text-slate-400 mb-4">
-                  We've sent a verification OTP to <strong>{verificationEmail}</strong>. Please enter it below.
-                  <br/>
-                  (For demo purposes, check the browser console for the OTP).
+                  We've sent a verification OTP to <strong>{emailForVerification}</strong>. Please enter it below.
               </p>
               {verifyError && <p className="text-red-500 text-sm mb-4">{verifyError}</p>}
               {verifySuccess && <p className="text-green-500 text-sm mb-4">{verifySuccess}</p>}
@@ -274,11 +299,11 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, onCheckUser, onPassw
                   <label htmlFor="verify-otp" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Verification OTP</label>
                   <input type="text" id="verify-otp" value={verifyOtp} onChange={(e) => setVerifyOtp(e.target.value)} required className={inputClasses}/>
               </div>
-              <Button type="submit" className="w-full">Verify and Sign In</Button>
+              <Button type="submit" className="w-full" disabled={isVerifyingEmail}>{isVerifyingEmail ? 'Verifying...' : 'Verify and Sign In'}</Button>
             </form>
             <div className="mt-4 text-center">
-                <button onClick={handleResendClick} className="text-sm font-semibold text-blue-600 hover:text-blue-500">
-                    Didn't get an OTP? Resend.
+                <button onClick={handleResendClick} disabled={isResendingOtp} className="text-sm font-semibold text-blue-600 hover:text-blue-500 disabled:opacity-50">
+                    {isResendingOtp ? 'Resending...' : "Didn't get an OTP? Resend."}
                 </button>
             </div>
           </Card>
