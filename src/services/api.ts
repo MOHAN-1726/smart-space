@@ -3,7 +3,7 @@ import { createApi } from '@reduxjs/toolkit/query/react';
 import type { BaseQueryFn } from '@reduxjs/toolkit/query'
 import type { AxiosRequestConfig, AxiosError } from 'axios'
 import api from '../api/client';
-import { User, Exam } from '../types';
+import { User, Exam } from '../../types';
 
 const axiosBaseQuery = (
   { baseUrl }: { baseUrl: string } = { baseUrl: '' }
@@ -33,53 +33,53 @@ const axiosBaseQuery = (
 
 export const apiSlice = createApi({
   reducerPath: 'api',
-  baseQuery: axiosBaseQuery({ baseUrl: process.env.REACT_APP_API_BASE_URL || '' }),
+  baseQuery: axiosBaseQuery({ baseUrl: '/api' }),
   tagTypes: ['Student', 'Staff', 'Appointment', 'Hospital', 'Dashboard', 'Class', 'Material', 'Exam', 'User'],
   endpoints: builder => ({
     // Auth
-    login: builder.mutation({ 
-        query: credentials => ({ url: '/auth/login', method: 'post', data: credentials }),
+    login: builder.mutation({
+      query: credentials => ({ url: '/auth/login', method: 'post', data: credentials }),
     }),
-    register: builder.mutation({ 
-        query: userInfo => ({ url: '/auth/register', method: 'post', data: userInfo }),
+    register: builder.mutation({
+      query: userInfo => ({ url: '/auth/register', method: 'post', data: userInfo }),
     }),
-    verifyEmail: builder.mutation({ 
-        query: ({ email, otp }) => ({ url: '/auth/verify-email', method: 'post', data: { email, otp } }),
+    verifyEmail: builder.mutation({
+      query: ({ email, otp }) => ({ url: '/auth/verify-email', method: 'post', data: { email, otp } }),
     }),
-    resendVerification: builder.mutation({ 
-        query: ({ email }) => ({ url: '/auth/resend-verification', method: 'post', data: { email } }),
+    resendVerification: builder.mutation({
+      query: ({ email }) => ({ url: '/auth/resend-verification', method: 'post', data: { email } }),
     }),
-    forgotPassword: builder.mutation({ 
-        query: ({ email }) => ({ url: '/auth/forgot-password', method: 'post', data: { email } }),
+    forgotPassword: builder.mutation({
+      query: ({ email }) => ({ url: '/auth/forgot-password', method: 'post', data: { email } }),
     }),
-    resetPassword: builder.mutation({ 
-        query: credentials => ({ url: '/auth/reset-password', method: 'post', data: credentials }),
+    resetPassword: builder.mutation({
+      query: credentials => ({ url: '/auth/reset-password', method: 'post', data: credentials }),
     }),
-    
+
     // Users, Students, Staff
-    getStudents: builder.query<User[], void>({ 
-        query: () => ({ url: '/students', method: 'get' }),
-        providesTags: (result = []) => [...result.map(({ id }) => ({ type: 'Student' as const, id })), { type: 'Student', id: 'LIST' }],
+    getStudents: builder.query<User[], void>({
+      query: () => ({ url: '/students', method: 'get' }),
+      providesTags: (result = []) => [...result.map(({ id }) => ({ type: 'Student' as const, id })), { type: 'Student', id: 'LIST' }],
     }),
-    getStudent: builder.query<User, string>({ 
-        query: id => ({ url: `/students/${id}`, method: 'get' }),
-        providesTags: (result, error, id) => [{ type: 'Student', id }],
+    getStudent: builder.query<User, string>({
+      query: id => ({ url: `/students/${id}`, method: 'get' }),
+      providesTags: (result, error, id) => [{ type: 'Student', id }],
     }),
-    addStudent: builder.mutation<User, Partial<User>>({ 
-        query: student => ({ url: '/students', method: 'post', data: student }),
-        invalidatesTags: [{ type: 'Student', id: 'LIST' }],
+    addStudent: builder.mutation<User, Partial<User>>({
+      query: student => ({ url: '/students', method: 'post', data: student }),
+      invalidatesTags: [{ type: 'Student', id: 'LIST' }],
     }),
-    updateUser: builder.mutation<User, Partial<User>>({ 
-        query: ({ id, ...patch }) => ({ url: `/users/${id}`, method: 'put', data: patch }),
-        invalidatesTags: (result, error, { id }) => [{ type: 'User', id }, { type: 'Student', id }, { type: 'Staff', id }],
+    updateUser: builder.mutation<User, Partial<User>>({
+      query: ({ id, ...patch }) => ({ url: `/users/${id}`, method: 'put', data: patch }),
+      invalidatesTags: (result, error, { id }) => [{ type: 'User', id }, { type: 'Student', id }, { type: 'Staff', id }],
     }),
-    deleteStudent: builder.mutation<{ success: boolean; id: string }, string>({ 
-        query: id => ({ url: `/students/${id}`, method: 'delete' }),
-        invalidatesTags: (result, error, id) => [{ type: 'Student', id }],
+    deleteStudent: builder.mutation<{ success: boolean; id: string }, string>({
+      query: id => ({ url: `/students/${id}`, method: 'delete' }),
+      invalidatesTags: (result, error, id) => [{ type: 'Student', id }],
     }),
-    getStaff: builder.query<User[], void>({ 
-        query: () => ({ url: '/staff', method: 'get' }),
-        providesTags: (result = []) => [...result.map(({ id }) => ({ type: 'Staff' as const, id })), { type: 'Staff', id: 'LIST' }],
+    getStaff: builder.query<User[], void>({
+      query: () => ({ url: '/staff', method: 'get' }),
+      providesTags: (result = []) => [...result.map(({ id }) => ({ type: 'Staff' as const, id })), { type: 'Staff', id: 'LIST' }],
     }),
 
     // Exams
@@ -105,45 +105,45 @@ export const apiSlice = createApi({
     }),
 
     // Dashboard
-    getDashboardSummary: builder.query<any, void>({ 
+    getDashboardSummary: builder.query<any, void>({
       query: () => ({ url: '/dashboard/summary', method: 'get' }),
       providesTags: ['Dashboard'],
     }),
     // Appointments
-    getAppointments: builder.query<any[], void>({ 
+    getAppointments: builder.query<any[], void>({
       query: () => ({ url: '/appointments', method: 'get' }),
       providesTags: (result = []) => [...result.map(({ id }) => ({ type: 'Appointment' as const, id })), { type: 'Appointment', id: 'LIST' }],
     }),
     // Hospital
-    getBedCounts: builder.query<any, void>({ 
+    getBedCounts: builder.query<any, void>({
       query: () => ({ url: '/hospital/bedcounts', method: 'get' }),
       providesTags: ['Hospital'],
     }),
-    updateBedCounts: builder.mutation<any, any>({ 
-        query: counts => ({ url: '/hospital/bedcounts', method: 'put', data: counts }),
-        invalidatesTags: ['Hospital'],
+    updateBedCounts: builder.mutation<any, any>({
+      query: counts => ({ url: '/hospital/bedcounts', method: 'put', data: counts }),
+      invalidatesTags: ['Hospital'],
     }),
   }),
 });
 
-export const { 
-    useLoginMutation,
-    useRegisterMutation,
-    useVerifyEmailMutation,
-    useResendVerificationMutation,
-    useForgotPasswordMutation,
-    useResetPasswordMutation,
-    useGetStudentsQuery,
-    useGetStudentQuery,
-    useAddStudentMutation,
-    useUpdateUserMutation,
-    useDeleteStudentMutation,
-    useGetStaffQuery,
-    useGetExamsQuery,
-    useRequestExamPaperMutation,
-    useLazyGetExamPaperPresignedUrlQuery, // Use lazy query for on-demand fetching
-    useGetDashboardSummaryQuery,
-    useGetAppointmentsQuery,
-    useGetBedCountsQuery,
-    useUpdateBedCountsMutation,
+export const {
+  useLoginMutation,
+  useRegisterMutation,
+  useVerifyEmailMutation,
+  useResendVerificationMutation,
+  useForgotPasswordMutation,
+  useResetPasswordMutation,
+  useGetStudentsQuery,
+  useGetStudentQuery,
+  useAddStudentMutation,
+  useUpdateUserMutation,
+  useDeleteStudentMutation,
+  useGetStaffQuery,
+  useGetExamsQuery,
+  useRequestExamPaperMutation,
+  useLazyGetExamPaperPresignedUrlQuery, // Use lazy query for on-demand fetching
+  useGetDashboardSummaryQuery,
+  useGetAppointmentsQuery,
+  useGetBedCountsQuery,
+  useUpdateBedCountsMutation,
 } = apiSlice;

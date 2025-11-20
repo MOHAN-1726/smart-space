@@ -17,7 +17,7 @@ export interface Section {
 }
 
 export interface ClassMembership {
-  id:string;
+  id: string;
   userId: string;
   classId: string;
   sectionId?: string | null;
@@ -193,6 +193,7 @@ export interface Exam {
   date: string; // ISO Date string
   totalMarks: number;
   paperUrl?: string; // URL to the question paper PDF
+  paperStatus?: 'Available' | 'Requested' | 'NotAvailable'; // Status of exam paper availability
 }
 
 export interface ExamMark {

@@ -9,7 +9,7 @@ interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 export const Card: React.FC<CardProps> = ({ children, className = '', title, ...props }) => (
-  <div className={`bg-white dark:bg-slate-800 rounded-2xl shadow-lg overflow-hidden ${className}`} {...props}>
+  <div className={`glass-card rounded-2xl overflow-hidden hover-lift ${className}`} {...props}>
     {title && <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 px-6 pt-4">{title}</h3>}
     <div className="p-6">{children}</div>
   </div>
@@ -17,18 +17,16 @@ export const Card: React.FC<CardProps> = ({ children, className = '', title, ...
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'danger' | 'success';
-  // Fix: Add size prop to Button component to support different button sizes.
   size?: 'sm' | 'md';
 }
 
 export const Button: React.FC<ButtonProps> = ({ children, className, variant = 'primary', size = 'md', ...props }) => {
-  // Fix: Extracted padding from baseClasses to support different sizes.
-  const baseClasses = 'rounded-lg font-semibold focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-slate-900 transition-all duration-200 ease-in-out transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed';
+  const baseClasses = 'rounded-lg font-semibold focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-slate-900 transition-all duration-200 ease-out transform hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0';
   const variantClasses = {
-    primary: 'bg-blue-500 hover:bg-blue-600 focus:ring-blue-500 text-white',
-    secondary: 'bg-amber-400 hover:bg-amber-500 focus:ring-amber-300 text-slate-900',
-    danger: 'bg-red-500 hover:bg-red-600 focus:ring-red-500 text-white',
-    success: 'bg-green-500 hover:bg-green-600 focus:ring-green-500 text-white',
+    primary: 'bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-700 hover:to-primary-600 focus:ring-primary-500 text-white shadow-md shadow-primary-500/30',
+    secondary: 'bg-gradient-to-r from-accent-500 to-accent-400 hover:from-accent-600 hover:to-accent-500 focus:ring-accent-400 text-white shadow-md shadow-accent-500/30',
+    danger: 'bg-gradient-to-r from-red-600 to-red-500 hover:from-red-700 hover:to-red-600 focus:ring-red-500 text-white shadow-md shadow-red-500/30',
+    success: 'bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 focus:ring-emerald-500 text-white shadow-md shadow-emerald-500/30',
   };
 
   const sizeClasses = {
@@ -49,17 +47,17 @@ interface BadgeProps {
 
 export const StatusBadge: React.FC<BadgeProps> = ({ status }) => {
   const statusClasses: { [key: string]: string } = {
-    [RequestStatus.APPROVED]: 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400',
-    'Graded': 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400',
-    'Submitted': 'bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-400',
-    [RequestStatus.PENDING]: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-500/20 dark:text-yellow-400',
-    [RequestStatus.REJECTED]: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400',
+    [RequestStatus.APPROVED]: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 ring-1 ring-emerald-500/20',
+    'Graded': 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 ring-1 ring-emerald-500/20',
+    'Submitted': 'bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-400 ring-1 ring-sky-500/20',
+    [RequestStatus.PENDING]: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400 ring-1 ring-amber-500/20',
+    [RequestStatus.REJECTED]: 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400 ring-1 ring-rose-500/20',
   };
 
-  const classes = statusClasses[status] || 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300';
+  const classes = statusClasses[status] || 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300 ring-1 ring-slate-500/20';
 
   return (
-    <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${classes}`}>
+    <span className={`px-2.5 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${classes}`}>
       {status}
     </span>
   );
@@ -90,16 +88,16 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
 
   return (
     <div
-      className="fixed inset-0 bg-slate-900 bg-opacity-80 z-50 flex justify-center items-center p-4"
+      className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex justify-center items-center p-4"
       aria-modal="true"
       role="dialog"
     >
-      <div className="bg-white dark:bg-slate-800/80 dark:backdrop-blur-lg dark:border dark:border-white/10 rounded-2xl shadow-xl w-full max-w-md animate-scaleIn">
+      <div className="glass-card rounded-2xl shadow-2xl w-full max-w-md animate-scaleIn">
         <div className="p-6">
           <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
           <div className="mt-4 text-slate-600 dark:text-slate-400">{children}</div>
         </div>
-        <div className="bg-slate-50 dark:bg-slate-800/50 px-6 py-4 rounded-b-2xl flex justify-end gap-3">
+        <div className="bg-slate-50/50 dark:bg-slate-800/50 backdrop-blur-sm px-6 py-4 rounded-b-2xl flex justify-end gap-3">
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
@@ -144,30 +142,30 @@ export const Modal: React.FC<ModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 bg-slate-900 bg-opacity-80 z-50 flex justify-center items-center p-4 transition-opacity"
+      className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex justify-center items-center p-4 transition-opacity"
       aria-modal="true"
       role="dialog"
       onClick={onClose}
     >
-      <div 
-        className="bg-white dark:bg-slate-800/80 dark:backdrop-blur-lg dark:border dark:border-white/10 rounded-2xl shadow-xl w-full max-w-2xl transform transition-all animate-scaleIn"
+      <div
+        className="glass-card rounded-2xl shadow-2xl w-full max-w-2xl transform transition-all animate-scaleIn custom-scrollbar"
         onClick={e => e.stopPropagation()}
       >
-        <div className="p-6 border-b dark:border-slate-700 flex justify-between items-center">
+        <div className="p-6 border-b border-slate-200/50 dark:border-slate-700/50 flex justify-between items-center">
           <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
-          <button 
-            onClick={onClose} 
-            className="p-1 rounded-full text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-600 dark:hover:text-slate-200"
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-full text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
             aria-label="Close modal"
           >
-             <svg className="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            <svg className="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
-        <div className="p-6 max-h-[60vh] overflow-y-auto">{children}</div>
-        <div className="bg-slate-50 dark:bg-slate-800/50 px-6 py-4 rounded-b-2xl flex justify-end gap-3">
-            {footer ? footer : <Button variant="secondary" onClick={onClose}>Close</Button>}
+        <div className="p-6 max-h-[60vh] overflow-y-auto custom-scrollbar">{children}</div>
+        <div className="bg-slate-50/50 dark:bg-slate-800/50 backdrop-blur-sm px-6 py-4 rounded-b-2xl flex justify-end gap-3">
+          {footer ? footer : <Button variant="secondary" onClick={onClose}>Close</Button>}
         </div>
       </div>
     </div>
@@ -181,32 +179,32 @@ interface ProfilePictureProps {
 }
 
 export const ProfilePicture: React.FC<ProfilePictureProps> = ({ user, size = 'md', className = '' }) => {
-    const sizeClasses = {
-        sm: 'w-8 h-8',
-        md: 'w-10 h-10',
-        lg: 'w-12 h-12',
-        xl: 'w-32 h-32',
-    };
-    const iconSizeClasses = {
-        sm: 'w-4 h-4',
-        md: 'w-5 h-5',
-        lg: 'w-6 h-6',
-        xl: 'w-16 h-16',
-    };
+  const sizeClasses = {
+    sm: 'w-8 h-8',
+    md: 'w-10 h-10',
+    lg: 'w-12 h-12',
+    xl: 'w-32 h-32',
+  };
+  const iconSizeClasses = {
+    sm: 'w-4 h-4',
+    md: 'w-5 h-5',
+    lg: 'w-6 h-6',
+    xl: 'w-16 h-16',
+  };
 
-    if (user?.profilePhotoUrl) {
-        return (
-            <img
-                src={user.profilePhotoUrl}
-                alt={user.name ?? 'Profile Picture'}
-                className={`rounded-full object-cover ${sizeClasses[size]} ${className}`}
-            />
-        );
-    }
-
+  if (user?.profilePhotoUrl) {
     return (
-        <div className={`rounded-full flex items-center justify-center bg-slate-200 dark:bg-slate-700 ${sizeClasses[size]} ${className}`}>
-            <UserIcon className={`${iconSizeClasses[size]} text-slate-400 dark:text-slate-500`} />
-        </div>
+      <img
+        src={user.profilePhotoUrl}
+        alt={user.name ?? 'Profile Picture'}
+        className={`rounded-full object-cover ring-2 ring-primary-500/20 ${sizeClasses[size]} ${className}`}
+      />
     );
+  }
+
+  return (
+    <div className={`rounded-full flex items-center justify-center bg-gradient-to-br from-primary-400 to-accent-400 ${sizeClasses[size]} ${className}`}>
+      <UserIcon className={`${iconSizeClasses[size]} text-white`} />
+    </div>
+  );
 }

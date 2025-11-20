@@ -5,7 +5,7 @@ import { auth, authorize } from '../middleware/auth';
 
 const router = Router();
 
-router.post('/', auth, authorize(['teacher']), createAssignment);
+router.post('/', auth, authorize(['STAFF']), createAssignment);
 router.get('/class/:classId', auth, getAssignmentsByClass);
 
 export default router;

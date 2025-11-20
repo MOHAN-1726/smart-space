@@ -5,7 +5,7 @@ export interface UserDocument extends Document {
   name: string;
   email: string;
   password: string;
-  role: 'student' | 'teacher' | 'admin';
+  role: 'STUDENT' | 'STAFF' | 'ADMIN' | 'PARENT';
 }
 
 export interface ClassDocument extends Document {
