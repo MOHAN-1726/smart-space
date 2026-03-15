@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
   "name": "smart-space-monorepo",
   "version": "1.0.0",
   "private": true,
@@ -9,3 +10,63 @@
     "dev:backend": "npm run dev --prefix backend"
   }
 }
+=======
+  "name": "student-activity-portal",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "dev:backend": "tsx watch src/index.ts",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@google/genai": "^0.14.0",
+    "@reduxjs/toolkit": "^2.10.1",
+    "axios": "^1.13.2",
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.20.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-redux": "^9.2.0",
+    "redux-persist": "^6.0.0",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/forms": "^0.5.10",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@types/bcrypt": "^6.0.0",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.5",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^22.14.0",
+    "@types/uuid": "^10.0.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "autoprefixer": "^10.4.22",
+    "jsdom": "^27.0.1",
+    "nodemon": "^3.1.11",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.18",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.20.6",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0",
+    "vitest": "^4.0.10"
+  },
+  "resolutions": {
+    "jsdom": "^24.1.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "jsdom": "^24.1.0"
+    }
+  }
+}
+>>>>>>> 2e62ce9fbc6c6f54c11df0288ad7eaf4339e1407

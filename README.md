@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Smart Space Classroom Management System
 
 A modern school management platform with analytics, interactive calendar, notification system, and leave workflows.
@@ -42,3 +43,6 @@ npm run dev:frontend
 ## 📄 Documentation
 - [Frontend README](./frontend/README.md)
 - [Backend README](./backend/README.md)
+=======
+
+>>>>>>> 2e62ce9fbc6c6f54c11df0288ad7eaf4339e1407
