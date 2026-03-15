@@ -1,5 +1,7 @@
-import 'dotenv/config';
-import sqlite3 from 'sqlite3';
+import 'dotenv/config'; import Database from "better-sqlite3";
+
+const db = new Database("smartspace.db");
+export default db;
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -7,12 +9,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dbPath = process.env.DATABASE_PATH ? path.resolve(__dirname, process.env.DATABASE_PATH) : path.join(__dirname, 'classroom.sqlite');
 
 const sqlite = sqlite3.verbose();
-const db = new sqlite.Database(dbPath);
+const sqliteDB = new sqlite.Database(dbPath);
 
 // Promisified helper
 export const query = (sql, params = []) => {
   return new Promise((resolve, reject) => {
-    db.all(sql, params, (err, rows) => {
+    sqliteDB.all(sql, params, (err, rows) => {
       if (err) {
         console.error("DATABASE QUERY ERROR:", err, "SQL:", sql, "PARAMS:", params);
         reject(err);
@@ -24,7 +26,7 @@ export const query = (sql, params = []) => {
 
 export const get = (sql, params = []) => {
   return new Promise((resolve, reject) => {
-    db.get(sql, params, (err, row) => {
+    sqliteDB.get(sql, params, (err, row) => {
       if (err) {
         console.error("DATABASE GET ERROR:", err, "SQL:", sql, "PARAMS:", params);
         reject(err);
@@ -36,7 +38,7 @@ export const get = (sql, params = []) => {
 
 export const run = (sql, params = []) => {
   return new Promise((resolve, reject) => {
-    db.run(sql, params, function (err) {
+    sqliteDB.run(sql, params, function (err) {
       if (err) {
         console.error("DATABASE RUN ERROR:", err, "SQL:", sql, "PARAMS:", params);
         reject(err);

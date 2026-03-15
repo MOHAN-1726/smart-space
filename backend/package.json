@@ -12,6 +12,7 @@
     },
     "dependencies": {
         "bcrypt": "^6.0.0",
+        "better-sqlite3": "^12.8.0",
         "compression": "^1.8.1",
         "cookie-parser": "^1.4.7",
         "cors": "^2.8.5",
@@ -22,7 +23,6 @@
         "helmet": "^8.1.0",
         "jsonwebtoken": "^9.0.3",
         "multer": "^2.0.2",
-        "sqlite3": "^6.0.1",
         "supertest": "^6.3.3",
         "winston": "^3.19.0"
     }
