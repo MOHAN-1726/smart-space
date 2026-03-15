@@ -1,0 +1,5 @@
+{
+  "name": "Student Activity Portal",
+  "description": "A comprehensive portal for managing student activities including attendance, assignments, and various requests. It features role-based dashboards for students, staff, and parents.",
+  "requestFramePermissions": []
+}
