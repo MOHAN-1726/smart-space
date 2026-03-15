@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
@@ -11,9 +12,6 @@ import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
 import compression from 'compression';
 import requestID from 'express-request-id';
-import dotenv from 'dotenv';
-
-dotenv.config();
 
 import { get, query, run, initDatabase } from './database.js';
 import { authMiddleware, requireRole } from './authMiddleware.js';
@@ -228,6 +226,23 @@ app.post('/api/classes/join', async (req, res) => {
         res.json({ success: true, classId: cls.id });
     } catch (err) {
         res.status(500).json({ error: 'Failed to join class' });
+    }
+});
+
+// GET /api/classes - returns classes for the authenticated user
+app.get('/api/classes', async (req, res) => {
+    try {
+        const classes = await query(`
+            SELECT c.*, m.role as userRole, u.name as ownerName, u.photoUrl as ownerPhoto
+            FROM classes c
+            JOIN class_memberships m ON c.id = m.classId
+            JOIN users u ON c.ownerId = u.id
+            WHERE c.organizationId = ? AND c.isDeleted = 0 AND m.userId = ?
+        `, [req.user.organizationId, req.user.userId]);
+        res.json(classes);
+    } catch (err) {
+        console.error('[CLASSES] Error fetching classes:', err);
+        res.status(500).json({ error: 'Failed to fetch classes', details: err.message });
     }
 });
 

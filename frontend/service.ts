@@ -89,13 +89,27 @@ const fetchWithAuth = async (endpoint: string, options: RequestInit = {}): Promi
 
     if (response.status === 401 && endpoint !== '/login' && endpoint !== '/register') {
         logger.info('[API] Got 401, attempting token refresh...');
-        const refreshRes = await fetch(`${API_BASE_URL}/refresh`, { method: 'POST' });
+        const storedUser = localStorage.getItem('currentUser');
+        if (!storedUser) {
+            logger.warn('[API] No stored user for refresh, logging out...');
+            localStorage.removeItem('currentUser');
+            window.location.reload();
+            return Promise.reject(new Error('Session expired'));
+        }
+
+        const user = JSON.parse(storedUser);
+        const refreshRes = await fetch(`${API_BASE_URL}/refresh`, { 
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refreshToken: user.refreshToken || user.token || user.accessToken }) 
+        });
         if (refreshRes.ok) {
             const data = await refreshRes.json();
             const storedUser = localStorage.getItem('currentUser');
             if (storedUser) {
                 const user = JSON.parse(storedUser);
                 user.token = data.accessToken;
+                user.refreshToken = data.refreshToken; // Also update refresh token if returned
                 localStorage.setItem('currentUser', JSON.stringify(user));
                 logger.info('[API] Token refreshed, retrying request...');
 

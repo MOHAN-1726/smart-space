@@ -94,8 +94,8 @@ const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({ studentId }
 
         <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
           <h3 className="text-slate-900 font-bold mb-8">Performance Distribution</h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
+          <div style={{ width: '100%', minWidth: 0 }}>
+            <ResponsiveContainer width="100%" height={256}>
               <BarChart data={data.subjectStats}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis 
@@ -124,8 +124,8 @@ const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({ studentId }
         <div className="relative z-10">
           <h3 className="font-bold mb-2">Academic Consistency</h3>
           <p className="text-slate-400 text-sm mb-8">Quarterly progress tracking</p>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
+          <div style={{ width: '100%', minWidth: 0 }}>
+            <ResponsiveContainer width="100%" height={256}>
               <BarChart data={data.quarterlyProgress}>
                 <Tooltip 
                   contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '12px' }}

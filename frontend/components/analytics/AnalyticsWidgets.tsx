@@ -146,8 +146,8 @@ export const PerformanceChart: React.FC<{ data: any[] }> = ({ data }) => {
       className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100"
     >
       <h3 className="text-slate-900 font-bold mb-6">Performance Trends</h3>
-      <div className="h-64 w-full">
-        <ResponsiveContainer width="100%" height="100%">
+      <div style={{ width: '100%', minWidth: 0 }}>
+        <ResponsiveContainer width="100%" height={256}>
           <LineChart data={data}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
             <XAxis 
