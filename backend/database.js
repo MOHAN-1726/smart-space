@@ -1,52 +1,49 @@
-import 'dotenv/config'; import Database from "better-sqlite3";
-
-const db = new Database("smartspace.db");
-export default db;
+import 'dotenv/config';
+import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dbPath = process.env.DATABASE_PATH ? path.resolve(__dirname, process.env.DATABASE_PATH) : path.join(__dirname, 'classroom.sqlite');
+const debugPath = path.resolve(__dirname, 'debug.log');
+const isTest = process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'test ';
 
-const sqlite = sqlite3.verbose();
-const sqliteDB = new sqlite.Database(dbPath);
+const dbPath = isTest ? ':memory:' : (process.env.DATABASE_PATH ? path.resolve(__dirname, process.env.DATABASE_PATH) : path.join(__dirname, 'classroom.sqlite'));
 
-// Promisified helper
-export const query = (sql, params = []) => {
-  return new Promise((resolve, reject) => {
-    sqliteDB.all(sql, params, (err, rows) => {
-      if (err) {
-        console.error("DATABASE QUERY ERROR:", err, "SQL:", sql, "PARAMS:", params);
-        reject(err);
-      }
-      else resolve(rows);
-    });
-  });
+console.log(`[DATABASE] Using ${isTest ? 'IN-MEMORY' : dbPath}`);
+const db = new Database(dbPath);
+db.pragma('foreign_keys = ON');
+
+// Promisified helper for backward compatibility
+export const query = async (sql, params = []) => {
+  try {
+    return db.prepare(sql).all(...params);
+  } catch (err) {
+    console.error("DATABASE QUERY ERROR:", err.message, "SQL:", sql, "PARAMS:", params);
+    throw err;
+  }
 };
 
-export const get = (sql, params = []) => {
-  return new Promise((resolve, reject) => {
-    sqliteDB.get(sql, params, (err, row) => {
-      if (err) {
-        console.error("DATABASE GET ERROR:", err, "SQL:", sql, "PARAMS:", params);
-        reject(err);
-      }
-      else resolve(row);
-    });
-  });
+export const get = async (sql, params = []) => {
+  try {
+    return db.prepare(sql).get(...params);
+  } catch (err) {
+    console.error("DATABASE GET ERROR:", err.message, "SQL:", sql, "PARAMS:", params);
+    throw err;
+  }
 };
 
-export const run = (sql, params = []) => {
-  return new Promise((resolve, reject) => {
-    sqliteDB.run(sql, params, function (err) {
-      if (err) {
-        console.error("DATABASE RUN ERROR:", err, "SQL:", sql, "PARAMS:", params);
-        reject(err);
-      }
-      else resolve({ id: this.lastID, lastID: this.lastID, changes: this.changes });
-    });
-  });
+export const run = async (sql, params = []) => {
+  try {
+    const result = db.prepare(sql).run(...params);
+    return { id: result.lastInsertRowid, lastID: result.lastInsertRowid, changes: result.changes };
+  } catch (err) {
+    console.error("DATABASE RUN ERROR:", err.message, "SQL:", sql, "PARAMS:", params);
+    throw err;
+  }
 };
+
+export default db;
 
 // Initialize Database
 export async function initDatabase() {

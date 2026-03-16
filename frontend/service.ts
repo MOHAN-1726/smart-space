@@ -205,6 +205,9 @@ export const api = {
     getStudentLeaveRequests: async (studentId: string) => {
         return api.get(`/requests/student/${studentId}`);
     },
+    getClassLeaveRequests: async (classId: string) => {
+        return api.get(`/classes/${classId}/leave-requests`);
+    },
     getRequestSummary: async (studentId: string) => {
         return api.get(`/requests/summary/${studentId}`);
     },

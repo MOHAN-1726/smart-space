@@ -4,31 +4,22 @@ import { api } from '../service';
 
 interface CalendarWidgetProps {
     user: User;
+    classes?: any[];
 }
 
-const CalendarWidget: React.FC<CalendarWidgetProps> = ({ user }) => {
+const CalendarWidget: React.FC<CalendarWidgetProps> = ({ user, classes: initialClasses }) => {
     const [events, setEvents] = useState<CalendarEvent[]>([]);
     const [currentDate, setCurrentDate] = useState(new Date());
     const [view, setView] = useState<'month' | 'week' | 'day'>('month');
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState<string>('all');
     const [classFilter, setClassFilter] = useState<string>('all');
-    const [classes, setClasses] = useState<any[]>([]);
+    const [classes, setClasses] = useState<any[]>(initialClasses || []);
     const [searchTerm, setSearchTerm] = useState('');
 
     useEffect(() => {
         fetchEvents();
-        fetchClasses();
     }, []);
-
-    const fetchClasses = async () => {
-        try {
-            const data = await api.get('/classes');
-            setClasses(data);
-        } catch (err) {
-            console.error('Failed to fetch classes:', err);
-        }
-    };
 
     const fetchEvents = async () => {
         try {

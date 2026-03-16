@@ -56,6 +56,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onClassSelect, classes, ref
 
     useEffect(() => {
         const fetchDashboardData = async () => {
+            if (activeTab !== 'overview') return;
             try {
                 setLoading(true);
                 const [summaryRes, attendanceRes, performanceRes, notificationsRes] = await Promise.all([
@@ -284,7 +285,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onClassSelect, classes, ref
                     <LeaveRequestList user={user} />
                 </div>
             ) : activeTab === 'calendar' ? (
-                <CalendarWidget user={user} />
+                <CalendarWidget user={user} classes={classes} />
             ) : activeTab === 'performance' ? (
                 <div className="space-y-6">
                     <PerformanceDashboard studentId={user.role === 'PARENT' ? user.studentId || '' : user.id} />

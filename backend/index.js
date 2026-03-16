@@ -42,7 +42,19 @@ const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-for-dev';
 const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET || 'fallback-refresh-secret-for-dev';
 
 // Database Connection
-await initDatabase();
+let dbInitialized = false;
+app.use(async (req, res, next) => {
+    if (!dbInitialized) {
+        try {
+            await initDatabase();
+            dbInitialized = true;
+        } catch (err) {
+            console.error('Database initialization failed:', err);
+            return res.status(500).json({ error: 'Database initialization failed', details: err.message });
+        }
+    }
+    next();
+});
 
 // Multi-tenant Middleware
 app.use((req, res, next) => {
@@ -84,24 +96,30 @@ app.post('/api/login', authLimiter, async (req, res) => {
             return res.status(401).json({ error: 'Invalid email or password' });
         }
 
+        console.log('[LOGIN] Comparing password...');
         const isValidPwd = await bcrypt.compare(password, user.passwordHash);
+        console.log('[LOGIN] Password valid:', isValidPwd);
         if (!isValidPwd) return res.status(401).json({ error: 'Invalid email or password' });
 
+        console.log('[LOGIN] Signing tokens...');
         const userData = { userId: user.id, role: user.role, email: user.email, organizationId: user.organizationId };
         const accessToken = jwt.sign(userData, JWT_SECRET, { expiresIn: '15m' });
         const refreshToken = jwt.sign(userData, REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
 
+        console.log('[LOGIN] Inserting refresh token...');
         await run(`INSERT INTO refresh_tokens (id, userId, organizationId, token, expiresAt) VALUES (?, ?, ?, ?, ?)`,
-            [`RT${Date.now()}`, user.id, user.organizationId, refreshToken, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()]);
+            [`RT${Date.now()}_${Math.random().toString(36).substring(2, 5)}`, user.id, user.organizationId, refreshToken, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()]);
 
+        console.log('[LOGIN] Setting cookie...');
         res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: isProd, sameSite: 'strict', maxAge: 7 * 24 * 60 * 60 * 1000 });
 
         const returnUser = { ...user };
         delete returnUser.passwordHash;
 
+        console.log('[LOGIN] Success!');
         res.json({ ...returnUser, accessToken, refreshToken });
     } catch (err) {
-        console.error('[LOGIN] Error:', err);
+        console.error('Login error:', err);
         res.status(500).json({ error: 'Database error', details: err.message });
     }
 });
@@ -140,7 +158,7 @@ app.post('/api/register', authLimiter, async (req, res) => {
         const refreshToken = jwt.sign(userData, REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
 
         await run(`INSERT INTO refresh_tokens (id, userId, organizationId, token, expiresAt) VALUES (?, ?, ?, ?, ?)`,
-            [`RT${Date.now()}`, newUser.id, newUser.organizationId, refreshToken, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()]);
+            [`RT${Date.now()}_${Math.random().toString(36).substring(2, 5)}`, newUser.id, newUser.organizationId, refreshToken, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()]);
 
         res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: isProd, sameSite: 'strict', maxAge: 7 * 24 * 60 * 60 * 1000 });
 
@@ -266,7 +284,7 @@ app.get('/api/users/:userId/classes', async (req, res) => {
     }
 });
 
-// Delete a class (soft delete) – allowed for ADMIN or owning STAFF
+// Delete a class (soft delete) Ã¢â‚¬â€œ allowed for ADMIN or owning STAFF
 app.delete('/api/classes/:classId', requireRole(['ADMIN', 'STAFF']), async (req, res) => {
     try {
         // Look up class only by id and soft-delete flag; org is not enforced here
@@ -505,10 +523,10 @@ app.post('/api/classes/:classId/assignments', requireRole(['ADMIN', 'STAFF']), a
             }
         }
 
-        // Only create submissions for Assignments, not Notes
-        if (itemType === 'ASSIGNMENT') {
-            const students = await query(`SELECT userId FROM class_memberships WHERE classId = ? AND role = 'STUDENT'`, [req.params.classId]);
+        // Create submissions and notify students
+        const students = await query(`SELECT userId FROM class_memberships WHERE classId = ? AND role = 'STUDENT'`, [req.params.classId]);
 
+        if (itemType === 'ASSIGNMENT') {
             for (const s of students) {
                 await run(`INSERT INTO submissions (id, assignmentId, studentId, status, organizationId) VALUES (?, ?, ?, ?, ?)`,
                     [`S${Date.now()}_${s.userId}`, assignmentId, s.userId, 'Assigned', req.user.organizationId]);
@@ -1323,6 +1341,170 @@ app.put('/api/calendar/events/:id', requireRole(['ADMIN', 'STAFF']), async (req,
         } else if (source === 'ASSIGNMENT') {
             await run('UPDATE assignments SET dueDate = ? WHERE id = ?', [date, id]);
         }
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+
+// Analytics Endpoints
+app.get('/api/analytics/attendance/:userId', async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const records = await query(`
+            SELECT status, strftime('%Y-%m', joinedAt) as month 
+            FROM attendance_records 
+            WHERE studentId = ? AND isDeleted = 0
+        `, [userId]);
+
+        const total = records.length;
+        const present = records.filter(r => r.status === 'PRESENT' || r.status === 'ON_DUTY').length;
+        const absent = records.filter(r => r.status === 'ABSENT').length;
+        const percentage = total > 0 ? (present / total) * 100 : 0;
+
+        // Group by month for trend
+        const trendMap = {};
+        records.forEach(r => {
+            if (!trendMap[r.month]) trendMap[r.month] = { present: 0, total: 0 };
+            trendMap[r.month].total++;
+            if (r.status === 'PRESENT' || r.status === 'ON_DUTY') trendMap[r.month].present++;
+        });
+
+        const trend = Object.entries(trendMap).map(([month, data]) => ({
+            month,
+            percentage: (data.present / data.total) * 100
+        })).sort((a, b) => a.month.localeCompare(b.month));
+
+        res.json({ percentage, present, absent, total, trend });
+    } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.get('/api/analytics/performance/detailed/:studentId', async (req, res) => {
+    try {
+        const { studentId } = req.params;
+        const orgId = req.user.organizationId;
+
+        // 1. Detailed Subject Stats
+        const records = await query(`
+            SELECT subject, AVG(CAST(score AS FLOAT)/maxScore * 100) as avgScore
+            FROM performance_records
+            WHERE studentId = ? AND organizationId = ?
+            GROUP BY subject
+        `, [studentId, orgId]);
+
+        // 2. Ranking Logic
+        const allScores = await query(`
+            SELECT studentId, AVG(CAST(score AS FLOAT)/maxScore * 100) as avgScore
+            FROM performance_records
+            WHERE organizationId = ?
+            GROUP BY studentId
+            ORDER BY avgScore DESC
+        `, [orgId]);
+
+        const rank = allScores.findIndex(s => s.studentId === studentId) + 1;
+        const percentile = (((allScores.length - rank) / allScores.length) * 100).toFixed(1);
+
+        // 3. Assignment Completion
+        const assignments = await get(`
+            SELECT 
+                COUNT(*) as total,
+                SUM(CASE WHEN status IN ('TurnedIn', 'Returned') THEN 1 ELSE 0 END) as completed
+            FROM submissions
+            WHERE studentId = ? AND organizationId = ? AND isDeleted = 0
+        `, [studentId, orgId]);
+
+        // 4. Quarterly Progress (Mocking grouping by month/quarter for now)
+        const progress = await query(`
+            SELECT 
+                strftime('%Y-%m', date) as month,
+                AVG(CAST(score AS FLOAT)/maxScore * 100) as avgScore
+            FROM performance_records
+            WHERE studentId = ? AND organizationId = ?
+            GROUP BY month
+            ORDER BY month ASC
+            LIMIT 4
+        `, [studentId, orgId]);
+
+        res.json({
+            rank: rank || 0,
+            percentile: percentile || 0,
+            averageScore: allScores.find(s => s.studentId === studentId)?.avgScore.toFixed(1) || 0,
+            assignmentCompletion: assignments.total > 0 ? ((assignments.completed / assignments.total) * 100).toFixed(1) : 0,
+            totalTests: records.length,
+            subjectStats: records.map(r => ({ name: r.subject, score: r.avgScore.toFixed(1) })),
+            quarterlyProgress: progress.map(p => ({ month: p.month, score: p.avgScore.toFixed(1) }))
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+app.get('/api/analytics/performance/:userId', async (req, res) => {
+    try {
+        const records = await query('SELECT * FROM performance_records WHERE studentId = ? ORDER BY date ASC', [req.params.userId]);
+        res.json(records);
+    } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.get('/api/dashboard/summary', async (req, res) => {
+    try {
+        const { userId, role, organizationId } = req.user;
+        const today = new Date().toISOString().split('T')[0];
+
+        const assignmentsDue = await query(`
+            SELECT a.*, c.name as className FROM assignments a
+            JOIN classes c ON a.classId = c.id
+            JOIN class_memberships m ON a.classId = m.classId
+            WHERE m.userId = ? AND a.dueDate LIKE ? AND a.isDeleted = 0
+        `, [userId, `${today}%`]);
+
+        const upcomingExams = await query(`
+            SELECT * FROM school_events 
+            WHERE organizationId = ? AND category = 'Exam' AND date >= ? 
+            ORDER BY date ASC LIMIT 5
+        `, [organizationId, today]);
+
+        const latestAnnouncements = await query(`
+            SELECT a.*, u.name as authorName, c.name as className FROM announcements a
+            JOIN users u ON a.authorId = u.id
+            JOIN classes c ON a.classId = c.id
+            JOIN class_memberships m ON a.classId = m.classId
+            WHERE m.userId = ? AND a.isDeleted = 0
+            ORDER BY a.createdAt DESC LIMIT 5
+        `, [userId]);
+
+        res.json({ assignmentsDue, upcomingExams, latestAnnouncements });
+    } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+// Notification Endpoints
+app.get('/api/notifications', async (req, res) => {
+    try {
+        const notifications = await query(`
+            SELECT * FROM notifications 
+            WHERE userId = ? AND organizationId = ? 
+            ORDER BY createdAt DESC LIMIT 50
+        `, [req.user.userId, req.user.organizationId]);
+        res.json(notifications);
+    } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.put('/api/notifications/:id/read', async (req, res) => {
+    try {
+        await run('UPDATE notifications SET isRead = 1 WHERE id = ? AND userId = ?', [req.params.id, req.user.userId]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+// Enhanced Leave Workflow: Parent Approval
+app.put('/api/leave-requests/:id/parent-approve', requireRole(['PARENT']), async (req, res) => {
+    try {
+        const { status, remarks } = req.body;
+        await run('UPDATE leave_requests SET parentApprovalStatus = ? WHERE id = ?', [status, req.params.id]);
+        
+        // Trigger notification for student/staff if needed
+        const lr = await get('SELECT studentId, organizationId FROM leave_requests WHERE id = ?', [req.params.id]);
+        await triggerNotification(lr.studentId, 'STUDENT', 'LEAVE', 'Parent Approval Update', `Your parent has ${status.toLowerCase()} your leave request.`, `/dashboard/requests`, lr.organizationId);
 
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: 'Failed' }); }
@@ -1340,3 +1522,4 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 export default app;
+console.log('[INDEX] Module loaded successfully');
