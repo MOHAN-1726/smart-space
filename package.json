@@ -9,4 +9,3 @@
     "dev:backend": "npm run dev --prefix backend"
   }
 }
-

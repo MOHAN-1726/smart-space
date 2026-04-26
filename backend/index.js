@@ -23,6 +23,11 @@ import { authMiddleware, requireRole } from './authMiddleware.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const server = createServer(app);
+const allowedOrigins = [
+    "http://localhost:5173",
+    "https://smart-space-map.vercel.app"
+];
+
 const io = new Server(server, {
     cors: { origin: process.env.FRONTEND_URL || 'http://localhost:5173', credentials: true }
 });
@@ -69,17 +74,22 @@ app.use((req, res, next) => {
     next();
 });
 
-const upload = multer({
-    storage: multer.diskStorage({
-        destination: (req, file, cb) => cb(null, 'uploads/'),
-        filename: (req, file, cb) => cb(null, Date.now() + '-' + Math.round(Math.random() * 1E9) + '-' + file.originalname)
-    })
-});
+// Ensure uploads directory exists
+if (!fs.existsSync("./uploads")) {
+    fs.mkdirSync("./uploads");
+}
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.get('/.well-known/appspecific/com.chrome.devtools.json', (req, res) => res.sendStatus(404));
-app.get('/', (req, res) => res.send('Classroom Server (MongoDB) is running'));
-app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
+app.get('/', (req, res) => res.send('Classroom Server (SQLite) is running'));
+
+app.get("/api/health", (req, res) => {
+    res.status(200).json({
+        status: "ok",
+        service: "smart-space-backend",
+        timestamp: new Date()
+    });
+});
 
 app.get('/api/organizations', async (req, res) => {
     try {
@@ -2153,8 +2163,11 @@ cron.schedule('0 17 * * *', async () => {
 
 // Global Error Handler
 app.use((err, req, res, next) => {
-    console.error('[GLOBAL ERROR]', err);
-    res.status(500).json({ error: 'Internal Server Error', details: err.message, stack: err.stack });
+    console.error("[GLOBAL ERROR]", err);
+
+    res.status(err.status || 500).json({
+        error: err.message || "Internal Server Error"
+    });
 });
 
 // start server only when not running under tests
