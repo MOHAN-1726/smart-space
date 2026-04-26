@@ -74,12 +74,32 @@ app.use((req, res, next) => {
     next();
 });
 
-// Ensure uploads directory exists
-if (!fs.existsSync("./uploads")) {
-    fs.mkdirSync("./uploads");
+// Create uploads directory if missing
+const uploadDir = path.join(process.cwd(), "uploads");
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Configure storage
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+        const uniqueName = Date.now() + "-" + file.originalname;
+        cb(null, uniqueName);
+    }
+});
+
+// Create upload middleware
+const upload = multer({
+    storage: storage,
+    limits: {
+        fileSize: 10 * 1024 * 1024 // 10MB
+    }
+});
+
+app.use('/uploads', express.static(uploadDir));
 app.get('/.well-known/appspecific/com.chrome.devtools.json', (req, res) => res.sendStatus(404));
 app.get('/', (req, res) => res.send('Classroom Server (SQLite) is running'));
 
@@ -89,6 +109,28 @@ app.get("/api/health", (req, res) => {
         service: "smart-space-backend",
         timestamp: new Date()
     });
+});
+
+app.post('/api/upload', upload.single('file'), (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({
+                error: "No file uploaded"
+            });
+        }
+
+        res.json({
+            message: "File uploaded successfully",
+            filename: req.file.filename,
+            path: `/uploads/${req.file.filename}`
+        });
+
+    } catch (error) {
+        console.error("Upload error:", error);
+        res.status(500).json({
+            error: "Upload failed"
+        });
+    }
 });
 
 app.get('/api/organizations', async (req, res) => {
