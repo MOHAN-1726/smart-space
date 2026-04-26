@@ -2203,6 +2203,14 @@ cron.schedule('0 17 * * *', async () => {
     }
 });
 
+// Serve frontend static files
+app.use(express.static(path.join(__dirname, '../frontend/dist')));
+
+// Handle React routing
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
+});
+
 // Global Error Handler
 app.use((err, req, res, next) => {
     console.error("[GLOBAL ERROR]", err);
