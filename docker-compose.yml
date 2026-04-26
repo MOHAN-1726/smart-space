@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: smart-space-backend
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./backend/classroom.sqlite:/app/classroom.sqlite
+      - ./backend/uploads:/app/uploads
+    environment:
+      - NODE_ENV=production
+      - PORT=5001
+      - JWT_SECRET=${JWT_SECRET:-your-secret-key}
+      - REFRESH_TOKEN_SECRET=${REFRESH_TOKEN_SECRET:-your-refresh-secret-key}
+      - FRONTEND_URL=http://localhost  # Set this to your production domain
+    restart: always
+
+  frontend:
+    build: ./frontend
+    container_name: smart-space-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: always
+
+volumes:
+  uploads:

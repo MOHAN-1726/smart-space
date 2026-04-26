@@ -158,8 +158,8 @@ async function seed() {
   console.log('  TEACHER : qa.teacher@smartspace.test');
   console.log('  STUDENT : qa.student@smartspace.test');
   console.log('  PARENT  : qa.parent@smartspace.test');
-  console.log('\n🔗 Frontend: http://localhost:5173');
-  console.log('🔗 Backend:  http://localhost:5000\n');
+  console.log('\n🔗 Frontend: http://localhost (Port 80)');
+  console.log('🔗 Backend:  http://localhost:5001\n');
 }
 
 seed().catch(e => { console.error('❌ Seeder failed:', e); process.exit(1); });
