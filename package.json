@@ -9,4 +9,11 @@
     "dev:backend": "npm run dev --prefix backend"
   }
 }
-
+{
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
