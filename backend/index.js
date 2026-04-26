@@ -12,6 +12,9 @@ import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
 import compression from 'compression';
 import requestID from 'express-request-id';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+import cron from 'node-cron';
 
 import { get, query, run, initDatabase } from './database.js';
 import { authMiddleware, requireRole } from './authMiddleware.js';
@@ -19,6 +22,10 @@ import { authMiddleware, requireRole } from './authMiddleware.js';
 // Setup basic Express
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
+const server = createServer(app);
+const io = new Server(server, {
+    cors: { origin: 'http://localhost:5173', credentials: true }
+});
 const PORT = process.env.PORT || 5000;
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -26,7 +33,7 @@ app.set('trust proxy', 1);
 app.use(requestID());
 app.use(compression());
 app.use(helmet());
-app.use(cors({ origin: true, credentials: true }));
+app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
 
@@ -85,42 +92,37 @@ app.get('/api/organizations', async (req, res) => {
 
 app.post('/api/login', authLimiter, async (req, res) => {
     const { email, password } = req.body;
-    console.log('[LOGIN] Received request:', { email, password: password ? '***' : 'missing' });
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 
     try {
-        console.log('[LOGIN] Searching for user with email:', email);
-        const user = await get('SELECT * FROM users WHERE email = ? AND isDeleted = 0', [email]);
-        console.log('[LOGIN] User found:', user ? user.email : 'NOT FOUND');
+        const user = await get('SELECT * FROM users WHERE email = ? AND isDeleted = 0 AND isActive = 1', [email]);
         if (!user || !user.passwordHash) {
             return res.status(401).json({ error: 'Invalid email or password' });
         }
 
-        console.log('[LOGIN] Comparing password...');
         const isValidPwd = await bcrypt.compare(password, user.passwordHash);
-        console.log('[LOGIN] Password valid:', isValidPwd);
         if (!isValidPwd) return res.status(401).json({ error: 'Invalid email or password' });
 
-        console.log('[LOGIN] Signing tokens...');
-        const userData = { userId: user.id, role: user.role, email: user.email, organizationId: user.organizationId };
+        const userData = { id: user.id, userId: user.id, role: user.role, email: user.email, organizationId: user.organizationId };
         const accessToken = jwt.sign(userData, JWT_SECRET, { expiresIn: '15m' });
         const refreshToken = jwt.sign(userData, REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
 
-        console.log('[LOGIN] Inserting refresh token...');
+        // Save refresh token
         await run(`INSERT INTO refresh_tokens (id, userId, organizationId, token, expiresAt) VALUES (?, ?, ?, ?, ?)`,
             [`RT${Date.now()}_${Math.random().toString(36).substring(2, 5)}`, user.id, user.organizationId, refreshToken, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()]);
 
-        console.log('[LOGIN] Setting cookie...');
+        // Set Secure Cookies
+        res.cookie('accessToken', accessToken, { httpOnly: true, secure: isProd, sameSite: 'strict', maxAge: 15 * 60 * 1000 });
         res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: isProd, sameSite: 'strict', maxAge: 7 * 24 * 60 * 60 * 1000 });
 
         const returnUser = { ...user };
         delete returnUser.passwordHash;
+        delete returnUser.refreshToken;
 
-        console.log('[LOGIN] Success!');
-        res.json({ ...returnUser, accessToken, refreshToken });
+        res.json({ success: true, user: returnUser });
     } catch (err) {
         console.error('Login error:', err);
-        res.status(500).json({ error: 'Database error', details: err.message });
+        res.status(500).json({ error: 'Database error' });
     }
 });
 
@@ -129,14 +131,10 @@ app.post('/api/register', authLimiter, async (req, res) => {
     if (!password) return res.status(400).json({ error: 'Password required' });
 
     try {
-        // Ensure the user is attached to an organization (single-tenant friendly default)
         let org = await get('SELECT * FROM organizations WHERE isDeleted = 0 LIMIT 1');
         if (!org) {
             const orgId = `ORG${Date.now()}`;
-            await run(
-                'INSERT INTO organizations (id, name, domain, isDeleted, createdAt) VALUES (?, ?, ?, 0, ?)',
-                [orgId, 'Default Organization', null, new Date().toISOString()]
-            );
+            await run('INSERT INTO organizations (id, name, domain, isDeleted, createdAt) VALUES (?, ?, ?, 0, ?)', [orgId, 'Default Organization', null, new Date().toISOString()]);
             org = await get('SELECT * FROM organizations WHERE id = ?', [orgId]);
         }
 
@@ -147,62 +145,100 @@ app.post('/api/register', authLimiter, async (req, res) => {
         const passwordHash = await bcrypt.hash(password, salt);
 
         const userId = `U${Date.now()}`;
-        await run(
-            `INSERT INTO users (id, name, email, role, passwordHash, photoUrl, organizationId, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [userId, name, email, role || 'STUDENT', passwordHash, photoUrl || '', org.id, new Date().toISOString()]
-        );
+        await run(`INSERT INTO users (id, name, email, role, passwordHash, photoUrl, organizationId, createdAt, isActive) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+            [userId, name, email, role || 'STUDENT', passwordHash, photoUrl || '', org.id, new Date().toISOString()]);
 
         const newUser = await get('SELECT * FROM users WHERE id = ?', [userId]);
-        const userData = { userId: newUser.id, role: newUser.role, email: newUser.email, organizationId: newUser.organizationId };
+        const userData = { id: newUser.id, userId: newUser.id, role: newUser.role, email: newUser.email, organizationId: newUser.organizationId };
         const accessToken = jwt.sign(userData, JWT_SECRET, { expiresIn: '15m' });
-        const refreshToken = jwt.sign(userData, REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
+        // Add random salt to ensure unique token even in the same second
+        const refreshToken = jwt.sign({ ...userData, salt: Math.random().toString(36) }, REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
 
         await run(`INSERT INTO refresh_tokens (id, userId, organizationId, token, expiresAt) VALUES (?, ?, ?, ?, ?)`,
-            [`RT${Date.now()}_${Math.random().toString(36).substring(2, 5)}`, newUser.id, newUser.organizationId, refreshToken, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()]);
+            [`RT${Date.now()}_${Math.random().toString(36).substring(2,7)}`, newUser.id, newUser.organizationId, refreshToken, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()]);
 
+        res.cookie('accessToken', accessToken, { httpOnly: true, secure: isProd, sameSite: 'strict', maxAge: 15 * 60 * 1000 });
         res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: isProd, sameSite: 'strict', maxAge: 7 * 24 * 60 * 60 * 1000 });
 
         const returnUser = { ...newUser };
         delete returnUser.passwordHash;
 
-        res.json({ success: true, user: returnUser, accessToken, refreshToken });
+        res.json({ success: true, user: returnUser });
     } catch (err) {
         console.error('[REGISTER] Error:', err);
         res.status(500).json({ error: 'Registration failed' });
     }
 });
 
+app.post('/api/register-parent', requireRole(['ADMIN']), async (req, res) => {
+    const { name, email, password, studentId, relation } = req.body;
+    if (!email || !password || !studentId) return res.status(400).json({ error: 'Email, password, and studentId required' });
+
+    try {
+        const student = await get(`SELECT * FROM users WHERE id = ? AND role = 'STUDENT'`, [studentId]);
+        if (!student) return res.status(404).json({ error: 'Student not found' });
+
+        // Create Parent User
+        const salt = await bcrypt.genSalt(10);
+        const passwordHash = await bcrypt.hash(password, salt);
+        const parentId = `P${Date.now()}`;
+        
+        await run(`INSERT INTO users (id, name, email, role, passwordHash, organizationId, createdAt, isActive) VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+            [parentId, name, email, 'PARENT', passwordHash, student.organizationId, new Date().toISOString()]);
+
+        // Link Parent to Student
+        await run(`INSERT INTO parent_student_relationships (id, parentId, studentId, relation, organizationId, createdAt) VALUES (?, ?, ?, ?, ?, ?)`,
+            [`R${Date.now()}`, parentId, studentId, relation || 'guardian', student.organizationId, new Date().toISOString()]);
+
+        res.json({ success: true, message: 'Parent registered and linked to student' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Failed to register parent' });
+    }
+});
+
 app.post('/api/refresh', async (req, res) => {
-    const tokenStr = req.cookies.refreshToken || req.body.refreshToken;
+    const tokenStr = req.cookies.refreshToken;
     if (!tokenStr) return res.status(401).json({ error: 'No refresh token' });
 
     try {
         const decoded = jwt.verify(tokenStr, REFRESH_TOKEN_SECRET);
-        const dbToken = await get('SELECT * FROM refresh_tokens WHERE token = ?', [tokenStr]);
-        if (!dbToken || dbToken.revoked) return res.status(401).json({ error: 'Invalid or revoked token' });
+        const dbToken = await get('SELECT * FROM refresh_tokens WHERE token = ? AND revoked = 0', [tokenStr]);
+        if (!dbToken) return res.status(401).json({ error: 'Invalid or revoked token' });
 
-        const userData = { userId: decoded.userId, role: decoded.role, email: decoded.email, organizationId: decoded.organizationId };
+        // Verify user is still active
+        const user = await get('SELECT * FROM users WHERE id = ? AND isDeleted = 0 AND isActive = 1', [decoded.userId || decoded.id]);
+        if (!user) return res.status(401).json({ error: 'User inactive' });
+
+        const userData = { id: user.id, userId: user.id, role: user.role, email: user.email, organizationId: user.organizationId };
         const newAccessToken = jwt.sign(userData, JWT_SECRET, { expiresIn: '15m' });
-        const newRefreshToken = jwt.sign(userData, REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
+        const newRefreshToken = jwt.sign({ ...userData, salt: Math.random().toString(36) }, REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
 
         await run('UPDATE refresh_tokens SET revoked = 1 WHERE id = ?', [dbToken.id]);
         await run(`INSERT INTO refresh_tokens (id, userId, organizationId, token, expiresAt) VALUES (?, ?, ?, ?, ?)`,
-            [`RT${Date.now()}`, decoded.userId, decoded.organizationId, newRefreshToken, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()]);
+            [`RT${Date.now()}_${Math.random().toString(36).substring(2,7)}`, user.id, user.organizationId, newRefreshToken, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()]);
 
+        res.cookie('accessToken', newAccessToken, { httpOnly: true, secure: isProd, sameSite: 'strict', maxAge: 15 * 60 * 1000 });
         res.cookie('refreshToken', newRefreshToken, { httpOnly: true, secure: isProd, sameSite: 'strict', maxAge: 7 * 24 * 60 * 60 * 1000 });
-        res.json({ accessToken: newAccessToken, refreshToken: newRefreshToken });
+
+        res.json({ success: true });
     } catch (err) {
         return res.status(401).json({ error: 'Invalid token' });
     }
 });
 
 app.post('/api/logout', async (req, res) => {
-    const tokenStr = req.cookies.refreshToken || req.body.refreshToken;
+    const tokenStr = req.cookies.refreshToken;
     if (tokenStr) {
         await run('UPDATE refresh_tokens SET revoked = 1 WHERE token = ?', [tokenStr]);
     }
+    res.clearCookie('accessToken');
     res.clearCookie('refreshToken');
     res.json({ success: true });
+});
+
+app.get('/api/me', authMiddleware, (req, res) => {
+    res.json(req.user);
 });
 
 app.use('/api', authMiddleware);
@@ -266,18 +302,24 @@ app.get('/api/classes', async (req, res) => {
 
 app.get('/api/users/:userId/classes', async (req, res) => {
     try {
-        console.log('[CLASSES] Fetching classes for user:', req.params.userId, 'Org:', req.user.organizationId);
+        const { userId } = req.params;
+        // Data Isolation: User can only access their own data unless they are ADMIN
+        if (req.user.userId !== userId && req.user.role !== 'ADMIN') {
+            return res.status(403).json({ error: 'Access denied: Cannot access other users data' });
+        }
+
+        console.log('[CLASSES] Fetching classes for user:', userId, 'Org:', req.user.organizationId);
         const classes = await query(`
             SELECT c.*, m.role as userRole, u.name as ownerName, u.photoUrl as ownerPhoto
             FROM classes c
             JOIN class_memberships m ON c.id = m.classId
             JOIN users u ON c.ownerId = u.id
             WHERE c.organizationId = ? AND c.isDeleted = 0 AND m.userId = ?
-        `, [req.user.organizationId, req.params.userId]);
+        `, [req.user.organizationId, userId]);
 
         console.log('[CLASSES] Found classes count:', classes.length);
         res.json(classes);
-    } catch (err) {
+    } catch (err) { 
         console.error('[CLASSES] Error fetching classes:', err);
         if (err.stack) console.error(err.stack);
         res.status(500).json({ error: 'Failed to fetch classes', details: err.message, stack: err.stack });
@@ -563,7 +605,13 @@ app.delete('/api/assignments/:id', requireRole(['ADMIN', 'STAFF']), async (req, 
 
 app.get('/api/assignments/:assignmentId/mysubmission/:studentId', async (req, res) => {
     try {
-        let sub = await get('SELECT * FROM submissions WHERE assignmentId = ? AND studentId = ? AND isDeleted = 0', [req.params.assignmentId, req.params.studentId]);
+        const { assignmentId, studentId } = req.params;
+        // Data Isolation check
+        if (req.user.userId !== studentId && req.user.role !== 'ADMIN' && req.user.role !== 'STAFF') {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+
+        let sub = await get('SELECT * FROM submissions WHERE assignmentId = ? AND studentId = ? AND isDeleted = 0', [assignmentId, studentId]);
         if (!sub) {
             const subId = `S${Date.now()}`;
             await run(`INSERT INTO submissions (id, assignmentId, studentId, status, organizationId) VALUES (?, ?, ?, ?, ?)`,
@@ -664,6 +712,10 @@ app.post('/api/classes/:classId/sheet', requireRole(['ADMIN', 'STAFF']), async (
     try {
         const { date, records } = req.body;
         const sessionDesc = `Daily Attendance ${date}`;
+
+        // Point 4: Prevent Duplicate Attendance (Check if session already exists and is CLOSED)
+        // If teacher tries to submit for a date that already has a CLOSED session, we can either block or allow update.
+        // The current UI expects to be able to "Save Sheet", so we will update if exists, but we'll add a check.
         let session = await get('SELECT * FROM attendance_sessions WHERE classId = ? AND description = ? AND isDeleted = 0', [req.params.classId, sessionDesc]);
 
         if (!session) {
@@ -679,14 +731,23 @@ app.post('/api/classes/:classId/sheet', requireRole(['ADMIN', 'STAFF']), async (
             const status = typeof data === 'string' ? data : data.status;
             const remarks = typeof data === 'string' ? '' : (data.remarks || '');
             
-            await run(`INSERT INTO attendance_records (id, sessionId, studentId, organizationId, status, remarks, joinedAt) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                [`REC${Date.now()}_${studentId}`, session.id, studentId, req.user.organizationId, status, remarks, new Date().toISOString()]);
+            await run(`INSERT INTO attendance_records (id, sessionId, studentId, organizationId, status, remarks, joinedAt, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                [`REC${Date.now()}_${studentId}`, session.id, studentId, req.user.organizationId, status, remarks, new Date().toISOString(), new Date().toISOString()]);
+
+            if (status === 'ABSENT') {
+                const rels = await query('SELECT parentId FROM parent_student_relationships WHERE studentId = ?', [studentId]);
+                for (const rel of rels) {
+                    await triggerNotification(rel.parentId, 'PARENT', 'ATTENDANCE', 'Child Absence Alert', `Your child was marked ABSENT for ${sessionDesc}.`, `/dashboard`, req.user.organizationId);
+                }
+            }
         }
 
         res.json({ success: true });
 
-        // Attendance Shortage Check
-        for (const studentId of Object.keys(records)) {
+        // Post-save: Attendance Shortage & Consecutive Absence Checks
+        for (const [studentId, data] of Object.entries(records)) {
+            const studentStatus = typeof data === 'string' ? data : data.status;
+
             const stats = await get(`
                 SELECT 
                     COUNT(*) as total,
@@ -698,11 +759,45 @@ app.post('/api/classes/:classId/sheet', requireRole(['ADMIN', 'STAFF']), async (
             if (stats && stats.total >= 5) {
                 const percentage = (stats.present / stats.total) * 100;
                 if (percentage < 75) {
-                    await triggerNotification(studentId, 'STUDENT', 'ATTENDANCE', 'Attendance Warning', `Your attendance has dropped to ${percentage.toFixed(1)}%. Please maintain at least 75%.`, `/dashboard`, req.user.organizationId);
+                    // Deduplicate: only alert if no similar notification in last 24h
+                    const recentAlert = await get(`
+                        SELECT id FROM notifications 
+                        WHERE userId = ? AND type = 'ATTENDANCE' AND title = 'Attendance Warning'
+                        AND createdAt >= datetime('now', '-24 hours')
+                        LIMIT 1
+                    `, [studentId]);
+                    if (!recentAlert) {
+                        await triggerNotification(studentId, 'STUDENT', 'ATTENDANCE', 'Attendance Warning', `Your attendance has dropped to ${percentage.toFixed(1)}%. Please maintain at least 75%.`, `/dashboard`, req.user.organizationId);
+                    }
+                }
+            }
+
+            // Consecutive Absence Detection (3 days) — FIX: use studentStatus not undefined 'status'
+            if (studentStatus === 'ABSENT') {
+                const recentRecords = await query(`
+                    SELECT status FROM attendance_records 
+                    WHERE studentId = ? AND isDeleted = 0 
+                    ORDER BY joinedAt DESC LIMIT 3
+                `, [studentId]);
+                
+                if (recentRecords.length === 3 && recentRecords.every(r => r.status === 'ABSENT')) {
+                    const parents = await query('SELECT parentId FROM parent_student_relationships WHERE studentId = ?', [studentId]);
+                    for (const p of parents) {
+                        // Deduplicate consecutive absence alert
+                        const recentConsAlert = await get(`
+                            SELECT id FROM notifications 
+                            WHERE userId = ? AND type = 'ATTENDANCE' AND title = 'Consecutive Absence Alert'
+                            AND createdAt >= datetime('now', '-24 hours')
+                            LIMIT 1
+                        `, [p.parentId]);
+                        if (!recentConsAlert) {
+                            await triggerNotification(p.parentId, 'PARENT', 'ATTENDANCE', 'Consecutive Absence Alert', `Your child has been absent for 3 consecutive days. Please check their status.`, `/dashboard`, req.user.organizationId);
+                        }
+                    }
                 }
             }
         }
-    } catch (err) { res.status(500).json({ error: 'Failed' }); }
+    } catch (err) { console.error('[SHEET ERROR]', err); res.status(500).json({ error: 'Failed to save attendance sheet' }); }
 });
 
 // Update a single attendance record
@@ -768,6 +863,165 @@ app.post('/api/sessions/:sessionId/join', async (req, res) => {
     } catch (err) { res.status(500).json({ error: 'Failed' }); }
 });
 
+// Admin: list of classes for dropdown in report UI
+app.get('/api/admin/attendance/classes', requireRole(['ADMIN']), async (req, res) => {
+    try {
+        const classes = await query(
+            'SELECT id, name, section, subject FROM classes WHERE organizationId = ? AND isDeleted = 0 ORDER BY name ASC',
+            [req.user.organizationId]
+        );
+        res.json(classes);
+    } catch (err) { res.status(500).json({ error: 'Failed to fetch classes' }); }
+});
+
+// Admin Attendance Reports — enhanced with summary stats + CSV export
+app.get('/api/admin/attendance/report', requireRole(['ADMIN']), async (req, res) => {
+    try {
+        const { classId, studentId, startDate, endDate, format } = req.query;
+        let where = 'WHERE r.isDeleted = 0 AND r.organizationId = ?';
+        let params = [req.user.organizationId];
+
+        if (classId) {
+            where += ' AND s.classId = ?';
+            params.push(classId);
+        }
+        if (studentId) {
+            where += ' AND r.studentId = ?';
+            params.push(studentId);
+        }
+        if (startDate) {
+            where += ' AND s.startTime >= ?';
+            params.push(startDate);
+        }
+        if (endDate) {
+            where += ' AND s.startTime <= ?';
+            params.push(endDate + 'T23:59:59.999Z');
+        }
+
+        const report = await query(`
+            SELECT 
+                r.id, r.status, r.remarks, r.joinedAt,
+                r.studentId,
+                u.name as studentName, u.email as studentEmail,
+                s.description as sessionName, s.startTime as date,
+                s.classId,
+                c.name as className
+            FROM attendance_records r
+            JOIN users u ON r.studentId = u.id
+            JOIN attendance_sessions s ON r.sessionId = s.id
+            JOIN classes c ON s.classId = c.id
+            ${where}
+            ORDER BY s.startTime DESC
+        `, params);
+
+        // CSV export
+        if (format === 'csv') {
+            const csvHeader = 'Date,Student Name,Student Email,Class,Session,Status,Remarks\n';
+            const csvRows = report.map(r => [
+                new Date(r.date).toLocaleDateString(),
+                `"${r.studentName}"`,
+                r.studentEmail,
+                `"${r.className}"`,
+                `"${r.sessionName}"`,
+                r.status,
+                `"${r.remarks || ''}"`
+            ].join(',')).join('\n');
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', `attachment; filename="attendance_report_${new Date().toISOString().split('T')[0]}.csv"`);
+            return res.send(csvHeader + csvRows);
+        }
+
+        // Compute summary stats
+        const total = report.length;
+        const presentCount = report.filter(r => r.status === 'PRESENT' || r.status === 'ON_DUTY').length;
+        const absentCount = report.filter(r => r.status === 'ABSENT').length;
+        const summary = {
+            total,
+            present: presentCount,
+            absent: absentCount,
+            presentPct: total > 0 ? ((presentCount / total) * 100).toFixed(1) : '0.0',
+            absentPct: total > 0 ? ((absentCount / total) * 100).toFixed(1) : '0.0'
+        };
+
+        res.json({ report, summary });
+    } catch (err) { console.error('[ADMIN REPORT]', err); res.status(500).json({ error: 'Failed to generate report' }); }
+});
+
+// Attendance Analytics for Student/Parent — enhanced with trends, class breakdown, streak
+app.get('/api/attendance/analytics/:studentId', async (req, res) => {
+    try {
+        const { studentId } = req.params;
+        
+        // Security check
+        if (req.user.role === 'PARENT') {
+            const rel = await get('SELECT * FROM parent_student_relationships WHERE parentId = ? AND studentId = ?', [req.user.userId, studentId]);
+            if (!rel) return res.status(403).json({ error: 'Unauthorized child access' });
+        } else if (req.user.role === 'STUDENT' && req.user.userId !== studentId) {
+            return res.status(403).json({ error: 'Unauthorized access' });
+        }
+
+        // Overall stats
+        const records = await query(`
+            SELECT r.status, r.joinedAt, s.classId, c.name as className,
+                   strftime('%Y-%m', s.startTime) as month
+            FROM attendance_records r
+            JOIN attendance_sessions s ON r.sessionId = s.id
+            JOIN classes c ON s.classId = c.id
+            WHERE r.studentId = ? AND r.isDeleted = 0
+            ORDER BY r.joinedAt DESC
+        `, [studentId]);
+
+        const totalDays = records.length;
+        const presentDays = records.filter(r => r.status === 'PRESENT' || r.status === 'ON_DUTY').length;
+        const absentDays = records.filter(r => r.status === 'ABSENT').length;
+        const leaveDays = records.filter(r => r.status === 'LEAVE').length;
+        const percentage = totalDays > 0 ? (presentDays / totalDays) * 100 : 0;
+
+        // Monthly trend
+        const trendMap = {};
+        records.forEach(r => {
+            if (!r.month) return;
+            if (!trendMap[r.month]) trendMap[r.month] = { present: 0, absent: 0, total: 0, month: r.month };
+            trendMap[r.month].total++;
+            if (r.status === 'PRESENT' || r.status === 'ON_DUTY') trendMap[r.month].present++;
+            if (r.status === 'ABSENT') trendMap[r.month].absent++;
+        });
+        const trend = Object.values(trendMap)
+            .map((d) => ({ ...d, percentage: d.total > 0 ? +((d.present / d.total) * 100).toFixed(1) : 0 }))
+            .sort((a, b) => a.month.localeCompare(b.month));
+
+        // Class-level breakdown
+        const classMap = {};
+        records.forEach(r => {
+            if (!classMap[r.classId]) classMap[r.classId] = { classId: r.classId, className: r.className, present: 0, total: 0 };
+            classMap[r.classId].total++;
+            if (r.status === 'PRESENT' || r.status === 'ON_DUTY') classMap[r.classId].present++;
+        });
+        const classSummary = Object.values(classMap).map((d) => ({
+            ...d,
+            percentage: d.total > 0 ? +((d.present / d.total) * 100).toFixed(1) : 0
+        }));
+
+        // Consecutive absent streak (count from most recent record backwards)
+        let streak = 0;
+        for (const r of records) {
+            if (r.status === 'ABSENT') streak++;
+            else break;
+        }
+
+        res.json({
+            percentage: +percentage.toFixed(1),
+            presentDays,
+            absentDays,
+            leaveDays,
+            totalDays,
+            streak,
+            trend,
+            classSummary
+        });
+    } catch (err) { console.error('[ANALYTICS]', err); res.status(500).json({ error: 'Failed to load analytics' }); }
+});
+
 app.get('/api/classes/:classId/my-attendance', async (req, res) => {
     try {
         const records = await query(`
@@ -778,14 +1032,14 @@ app.get('/api/classes/:classId/my-attendance', async (req, res) => {
             ORDER BY s.startTime DESC
         `, [req.params.classId, req.query.userId]);
 
-        const totalRow = await get('SELECT count(*) as count FROM attendance_sessions WHERE classId = ? AND status = "CLOSED"', [req.params.classId]);
+        const totalRow = await get(`SELECT count(*) as count FROM attendance_sessions WHERE classId = ? AND status = 'CLOSED'`, [req.params.classId]);
         res.json({ records, totalSessions: totalRow.count });
     } catch (err) { res.status(500).json({ error: 'Failed' }); }
 });
 
 app.post('/api/sessions/:sessionId/end', requireRole(['ADMIN', 'STAFF']), async (req, res) => {
     try {
-        await run('UPDATE attendance_sessions SET status = "CLOSED", endTime = ? WHERE id = ?', [new Date().toISOString(), req.params.sessionId]);
+        await run(`UPDATE attendance_sessions SET status = 'CLOSED', endTime = ? WHERE id = ?`, [new Date().toISOString(), req.params.sessionId]);
         
         const students = await query(`SELECT userId FROM class_memberships WHERE classId = ? AND role = 'STUDENT'`, [req.body.classId]);
         const presentRecs = await query('SELECT studentId FROM attendance_records WHERE sessionId = ?', [req.params.sessionId]);
@@ -811,10 +1065,15 @@ app.post('/api/leave-requests', async (req, res) => {
         res.json({ success: true, id });
 
         // Notify Staff/Admin of the class
-        const staff = await query('SELECT userId FROM class_memberships WHERE classId = ? AND role IN ("STAFF", "ADMIN")', [req.body.classId]);
-        const studentUser = await get('SELECT name FROM users WHERE id = ?', [req.body.studentId]);
+        const staff = await query(`SELECT userId FROM class_memberships WHERE classId = ? AND role IN ('STAFF', 'ADMIN')`, [req.body.classId]);
+        const studentUser = await get('SELECT name, parentId FROM users WHERE id = ?', [req.body.studentId]);
         for (const s of staff) {
             await triggerNotification(s.userId, 'STAFF', 'LEAVE', 'New Leave Request', `${studentUser.name} submitted a ${req.body.type} request.`, `/dashboard`, req.user.organizationId);
+        }
+
+        // Notify Parent
+        if (studentUser && studentUser.parentId) {
+            await triggerNotification(studentUser.parentId, 'PARENT', 'LEAVE', 'Child Leave Request', `${studentUser.name} submitted a ${req.body.type} request.`, `/dashboard`, req.user.organizationId);
         }
     } catch (err) { res.status(500).json({ error: 'Failed' }); }
 });
@@ -897,12 +1156,113 @@ app.get('/api/classes/:classId/leave-requests', async (req, res) => {
 
 app.put('/api/leave-requests/:id/status', requireRole(['ADMIN', 'STAFF']), async (req, res) => {
     try {
+        const { status, staffRemarks, staffId } = req.body;
         await run('UPDATE leave_requests SET status = ?, staffRemarks = ?, reviewedBy = ?, reviewedAt = ? WHERE id = ?',
-            [req.body.status, req.body.staffRemarks, req.body.staffId, new Date().toISOString(), req.params.id]);
+            [status, staffRemarks, staffId, new Date().toISOString(), req.params.id]);
         
-        const lr = await get('SELECT studentId, organizationId FROM leave_requests WHERE id = ?', [req.params.id]);
-        await triggerNotification(lr.studentId, 'STUDENT', 'LEAVE', 'Leave Request Update', `Your leave request has been ${req.body.status.toLowerCase()}.`, `/dashboard`, lr.organizationId);
+        const lr = await get('SELECT * FROM leave_requests WHERE id = ?', [req.params.id]);
+        const student = await get('SELECT name, parentId FROM users WHERE id = ?', [lr.studentId]);
+        
+        // Notify Student
+        await triggerNotification(lr.studentId, 'STUDENT', 'LEAVE', 'Leave Request Update', `Your ${lr.type} request has been ${status.toLowerCase()}.`, `/dashboard`, lr.organizationId);
+        
+        // Notify Parent
+        if (student.parentId) {
+            await triggerNotification(student.parentId, 'PARENT', 'LEAVE', 'Child Request Update', `${student.name}'s ${lr.type} request has been ${status.toLowerCase()}.`, `/dashboard`, lr.organizationId);
+        }
 
+        // Auto-mark attendance as OD if approved
+        if (lr.type === 'OD' && status === 'APPROVED') {
+            const sessions = await query(`
+                SELECT id FROM attendance_sessions 
+                WHERE classId = ? 
+                AND startTime BETWEEN ? AND ? 
+                AND isDeleted = 0
+            `, [lr.classId, lr.fromDate, lr.toDate + 'T23:59:59']);
+            
+            for (const sess of sessions) {
+                const existing = await get('SELECT id FROM attendance_records WHERE sessionId = ? AND studentId = ?', [sess.id, lr.studentId]);
+                if (existing) {
+                    await run('UPDATE attendance_records SET status = ? WHERE id = ?', ['OD', existing.id]);
+                } else {
+                    await run('INSERT INTO attendance_records (id, sessionId, studentId, organizationId, status, joinedAt) VALUES (?, ?, ?, ?, ?, ?)',
+                        [`REC${Date.now()}_${Math.random().toString(36).substring(2,5)}`, sess.id, lr.studentId, lr.organizationId, 'OD', new Date().toISOString()]);
+                }
+            }
+        }
+
+        res.json({ success: true });
+    } catch (err) { console.error(err); res.status(500).json({ error: 'Failed' }); }
+});
+
+// No-Due Requests
+app.post('/api/no-due-requests', async (req, res) => {
+    try {
+        const id = `ND${Date.now()}`;
+        await run(`INSERT INTO no_due_requests (id, studentId, organizationId, reason, createdAt) VALUES (?, ?, ?, ?, ?)`,
+            [id, req.user.userId, req.user.organizationId, req.body.reason, new Date().toISOString()]);
+        
+        // Notify Admin and relevant staff (simplified: notify all staff in student's classes)
+        const staff = await query(`
+            SELECT DISTINCT m.userId 
+            FROM class_memberships m 
+            JOIN class_memberships sm ON m.classId = sm.classId 
+            WHERE sm.userId = ? AND m.role IN ('STAFF', 'ADMIN')
+        `, [req.user.userId]);
+        
+        for (const s of staff) {
+            await triggerNotification(s.userId, 'STAFF', 'NODUE', 'New No-Due Request', `A student has submitted a No-Due request.`, `/dashboard`, req.user.organizationId);
+        }
+        
+        res.json({ success: true, id });
+    } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.get('/api/no-due-requests', requireRole(['ADMIN', 'STAFF']), async (req, res) => {
+    try {
+        const reqs = await query(`
+            SELECT nd.*, u.name as studentName, u.email as studentEmail
+            FROM no_due_requests nd
+            JOIN users u ON nd.studentId = u.id
+            WHERE nd.organizationId = ? AND nd.isDeleted = 0
+            ORDER BY nd.createdAt DESC
+        `, [req.user.organizationId]);
+        res.json(reqs);
+    } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.get('/api/users/:userId/no-due-requests', async (req, res) => {
+    try {
+        const reqs = await query(`SELECT * FROM no_due_requests WHERE studentId = ? AND isDeleted = 0`, [req.params.userId]);
+        res.json(reqs);
+    } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.put('/api/no-due-requests/:id/review', requireRole(['STAFF', 'ADMIN']), async (req, res) => {
+    try {
+        await run('UPDATE no_due_requests SET status = ?, teacherRemarks = ?, teacherReviewedBy = ?, teacherReviewedAt = ? WHERE id = ?',
+            [req.body.status, req.body.remarks, req.user.userId, new Date().toISOString(), req.params.id]);
+        
+        // Notify Admin if teacher approved
+        if (req.body.status === 'TEACHER_APPROVED') {
+            const admins = await query(`SELECT id FROM users WHERE role = 'ADMIN' AND organizationId = (SELECT organizationId FROM no_due_requests WHERE id = ?)`, [req.params.id]);
+            for (const admin of admins) {
+                await triggerNotification(admin.id, 'ADMIN', 'NODUE', 'No-Due Review Update', `A No-Due request is ready for final approval.`, `/dashboard`, req.user.organizationId);
+            }
+        }
+        
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.put('/api/no-due-requests/:id/finalize', requireRole(['ADMIN']), async (req, res) => {
+    try {
+        await run('UPDATE no_due_requests SET status = ?, adminRemarks = ?, adminReviewedBy = ?, adminReviewedAt = ? WHERE id = ?',
+            ['COMPLETED', req.body.remarks, req.user.userId, new Date().toISOString(), req.params.id]);
+        
+        const nd = await get('SELECT studentId, organizationId FROM no_due_requests WHERE id = ?', [req.params.id]);
+        await triggerNotification(nd.studentId, 'STUDENT', 'NODUE', 'No-Due Finalized', `Your No-Due request has been completed.`, `/dashboard`, nd.organizationId);
+        
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: 'Failed' }); }
 });
@@ -1004,7 +1364,7 @@ app.get('/api/calendar', async (req, res) => {
                 WHERE lr.organizationId = ? AND lr.status = 'APPROVED' AND lr.isDeleted = 0
             `, [organizationId]);
         } else if (role === 'STUDENT') {
-            leaveReqs = await query('SELECT * FROM leave_requests WHERE studentId = ? AND status = "APPROVED" AND isDeleted = 0', [userId]);
+            leaveReqs = await query(`SELECT * FROM leave_requests WHERE studentId = ? AND status = 'APPROVED' AND isDeleted = 0`, [userId]);
         } else if (role === 'PARENT') {
             leaveReqs = await query(`
                 SELECT lr.*, u.name as studentName FROM leave_requests lr
@@ -1161,6 +1521,17 @@ async function triggerNotification(userId, role, type, title, message, link, org
         await run(`INSERT INTO notifications (id, userId, role, type, title, message, link, organizationId, createdAt) 
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [id, userId, role, type, title, message, link, organizationId, new Date().toISOString()]);
+        
+        // MODULE 2: Attendance SMS Alerts (Simulated)
+        if (type === 'ATTENDANCE' && message.toLowerCase().includes('absent')) {
+            const user = await get('SELECT phoneNumber FROM users WHERE id = ?', [userId]);
+            if (user && user.phoneNumber) {
+                console.log(`[SMS ALERT] To: ${user.phoneNumber} | Message: ${message}`);
+            }
+        }
+
+        // Real-time Push (Simulated via Socket)
+        io.to(`user_${userId}`).emit('notification', { id, title, message, type });
     } catch (err) {
         console.error('Failed to trigger notification:', err);
     }
@@ -1350,6 +1721,11 @@ app.put('/api/calendar/events/:id', requireRole(['ADMIN', 'STAFF']), async (req,
 app.get('/api/analytics/attendance/:userId', async (req, res) => {
     try {
         const { userId } = req.params;
+        // Data Isolation check
+        if (req.user.userId !== userId && req.user.role !== 'ADMIN' && req.user.role !== 'STAFF' && req.user.role !== 'PARENT') {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+
         const records = await query(`
             SELECT status, strftime('%Y-%m', joinedAt) as month 
             FROM attendance_records 
@@ -1441,15 +1817,49 @@ app.get('/api/analytics/performance/detailed/:studentId', async (req, res) => {
 
 app.get('/api/analytics/performance/:userId', async (req, res) => {
     try {
-        const records = await query('SELECT * FROM performance_records WHERE studentId = ? ORDER BY date ASC', [req.params.userId]);
+        const { userId } = req.params;
+        // Data Isolation: Parent can see their child's performance
+        let isParentOf = false;
+        if (req.user.role === 'PARENT') {
+            const rel = await get('SELECT * FROM parent_student_relationships WHERE parentId = ? AND studentId = ?', [req.user.userId, userId]);
+            if (rel) isParentOf = true;
+        }
+
+        if (req.user.userId !== userId && req.user.role !== 'ADMIN' && req.user.role !== 'STAFF' && !isParentOf) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+
+        const records = await query('SELECT * FROM performance_records WHERE studentId = ? ORDER BY date ASC', [userId]);
         res.json(records);
     } catch (err) { res.status(500).json({ error: 'Failed' }); }
 });
 
+app.get('/api/parent/students', requireRole(['PARENT']), async (req, res) => {
+    try {
+        const students = await query(`
+            SELECT u.id, u.name, u.email, u.photoUrl, r.relation
+            FROM users u
+            JOIN parent_student_relationships r ON u.id = r.studentId
+            WHERE r.parentId = ? AND u.isDeleted = 0
+        `, [req.user.userId]);
+        res.json(students);
+    } catch (err) { res.status(500).json({ error: 'Failed to fetch linked students' }); }
+});
+
 app.get('/api/dashboard/summary', async (req, res) => {
     try {
-        const { userId, role, organizationId } = req.user;
+        let { userId, role, organizationId } = req.user;
         const today = new Date().toISOString().split('T')[0];
+
+        // If parent is requesting for a specific child
+        if (role === 'PARENT' && req.query.userId) {
+            const rel = await get('SELECT * FROM parent_student_relationships WHERE parentId = ? AND studentId = ?', [userId, req.query.userId]);
+            if (rel) {
+                userId = req.query.userId;
+            } else {
+                return res.status(403).json({ error: 'Unauthorized child access' });
+            }
+        }
 
         const assignmentsDue = await query(`
             SELECT a.*, c.name as className FROM assignments a
@@ -1497,17 +1907,232 @@ app.put('/api/notifications/:id/read', async (req, res) => {
 });
 
 // Enhanced Leave Workflow: Parent Approval
-app.put('/api/leave-requests/:id/parent-approve', requireRole(['PARENT']), async (req, res) => {
+app.put('/api/leave-requests/:id/parent-approval', requireRole(['PARENT']), async (req, res) => {
     try {
         const { status, remarks } = req.body;
-        await run('UPDATE leave_requests SET parentApprovalStatus = ? WHERE id = ?', [status, req.params.id]);
+        await run('UPDATE leave_requests SET parentApprovalStatus = ?, parentRemarks = ? WHERE id = ?', [status, remarks, req.params.id]);
         
-        // Trigger notification for student/staff if needed
+        // Trigger notification for student/staff
         const lr = await get('SELECT studentId, organizationId FROM leave_requests WHERE id = ?', [req.params.id]);
         await triggerNotification(lr.studentId, 'STUDENT', 'LEAVE', 'Parent Approval Update', `Your parent has ${status.toLowerCase()} your leave request.`, `/dashboard/requests`, lr.organizationId);
 
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.get('/api/requests/parent/:parentId', requireRole(['PARENT']), async (req, res) => {
+    try {
+        const requests = await query(`
+            SELECT lr.*, u.name as studentName 
+            FROM leave_requests lr
+            JOIN users u ON lr.studentId = u.id
+            JOIN parent_student_relationships r ON lr.studentId = r.studentId
+            WHERE r.parentId = ? AND lr.isDeleted = 0
+            ORDER BY lr.createdAt DESC
+        `, [req.params.parentId]);
+        res.json(requests);
+    } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+// MODULE 5: Real-time Chat Endpoints
+app.get('/api/messages/:otherId', async (req, res) => {
+    try {
+        const messages = await query(`
+            SELECT * FROM messages 
+            WHERE (senderId = ? AND receiverId = ?) OR (senderId = ? AND receiverId = ?)
+            ORDER BY createdAt ASC
+        `, [req.user.userId, req.params.otherId, req.params.otherId, req.user.userId]);
+        res.json(messages);
+    } catch (err) { res.status(500).json({ error: 'Failed to fetch messages' }); }
+});
+
+app.post('/api/messages', async (req, res) => {
+    try {
+        const { receiverId, content } = req.body;
+        const id = `MSG${Date.now()}`;
+        const createdAt = new Date().toISOString();
+        await run(`INSERT INTO messages (id, senderId, receiverId, content, createdAt) VALUES (?, ?, ?, ?, ?)`,
+            [id, req.user.userId, receiverId, content, createdAt]);
+        
+        // Emit via Socket
+        io.to(`user_${receiverId}`).emit('message', { id, senderId: req.user.userId, content, createdAt });
+        
+        res.json({ success: true, id, createdAt });
+    } catch (err) { res.status(500).json({ error: 'Failed to send message' }); }
+});
+
+// Socket Connection Logic
+io.on('connection', (socket) => {
+    socket.on('join', (userId) => {
+        socket.join(`user_${userId}`);
+        console.log(`[SOCKET] User ${userId} joined their room`);
+    });
+
+    socket.on('disconnect', () => {
+        console.log('[SOCKET] User disconnected');
+    });
+});
+
+app.put('/api/users/profile', async (req, res) => {
+    try {
+        const { phoneNumber, name, photoUrl } = req.body;
+        await run('UPDATE users SET phoneNumber = ?, name = ?, photoUrl = ? WHERE id = ?', [phoneNumber, name, photoUrl, req.user.userId]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: 'Failed to update profile' }); }
+});
+
+// MODULE 2.9: Parent Homework Monitoring
+app.get('/api/student/assignments', async (req, res) => {
+    try {
+        const { userId } = req.query;
+        if (req.user.role !== 'ADMIN' && req.user.userId !== userId) return res.status(403).json({ error: 'Denied' });
+        
+        const assignments = await query(`
+            SELECT a.*, s.status as submissionStatus, s.grade, s.feedback
+            FROM assignments a
+            JOIN class_memberships m ON a.classId = m.classId
+            LEFT JOIN submissions s ON a.id = s.assignmentId AND s.studentId = ?
+            WHERE m.userId = ? AND a.isDeleted = 0
+            ORDER BY a.dueDate ASC
+        `, [userId, userId]);
+        res.json(assignments);
+    } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+app.get('/api/parent/student/:id/homework', requireRole(['PARENT']), async (req, res) => {
+    try {
+        const { id: studentId } = req.params;
+        // Verify relationship
+        const rel = await get('SELECT * FROM parent_student_relationships WHERE parentId = ? AND studentId = ?', [req.user.userId, studentId]);
+        if (!rel) return res.status(403).json({ error: 'Unauthorized student access' });
+
+        const homework = await query(`
+            SELECT a.*, s.status as submissionStatus, s.grade, s.feedback
+            FROM assignments a
+            JOIN class_memberships m ON a.classId = m.classId
+            LEFT JOIN submissions s ON a.id = s.assignmentId AND s.studentId = ?
+            WHERE m.userId = ? AND a.isDeleted = 0
+            ORDER BY a.dueDate ASC
+        `, [studentId, studentId]);
+        res.json(homework);
+    } catch (err) { res.status(500).json({ error: 'Failed' }); }
+});
+
+// Helper: check if notification was sent recently (deduplication)
+async function wasNotifiedRecently(userId, title, withinHours = 24) {
+    const threshold = new Date(Date.now() - withinHours * 60 * 60 * 1000).toISOString();
+    const existing = await get(
+        `SELECT id FROM notifications WHERE userId = ? AND title = ? AND createdAt >= ? LIMIT 1`,
+        [userId, title, threshold]
+    );
+    return !!existing;
+}
+
+// MODULE 1.5a: Morning Cron (8 AM) — Remind staff to take attendance
+cron.schedule('0 8 * * 1-6', async () => {
+    console.log('[CRON-8AM] Sending attendance reminder to staff...');
+    try {
+        const staffMembers = await query(
+            `SELECT id, organizationId FROM users WHERE role IN ('STAFF', 'ADMIN') AND isDeleted = 0 AND isActive = 1`
+        );
+        for (const staff of staffMembers) {
+            const alreadyNotified = await wasNotifiedRecently(staff.id, 'Daily Attendance Reminder', 20);
+            if (!alreadyNotified) {
+                await triggerNotification(
+                    staff.id, 'STAFF', 'ATTENDANCE',
+                    'Daily Attendance Reminder',
+                    'Don\'t forget to mark attendance for your classes today.',
+                    '/dashboard',
+                    staff.organizationId
+                );
+            }
+        }
+    } catch (err) {
+        console.error('[CRON-8AM ERROR]', err);
+    }
+});
+
+// MODULE 1.5b: Evening Cron (5 PM) — Low attendance alerts + consecutive absence + homework reminders
+cron.schedule('0 17 * * *', async () => {
+    console.log('[CRON-5PM] Running daily attendance and assignment checks...');
+    try {
+        // Process per-org for isolation
+        const orgs = await query('SELECT id FROM organizations WHERE isDeleted = 0');
+        for (const org of orgs) {
+            const students = await query(
+                `SELECT id, organizationId FROM users WHERE role = 'STUDENT' AND isDeleted = 0 AND isActive = 1 AND organizationId = ?`,
+                [org.id]
+            );
+
+            for (const student of students) {
+                // Low attendance warning (<75%)
+                const stats = await get(`
+                    SELECT COUNT(*) as total, SUM(CASE WHEN status IN ('PRESENT', 'ON_DUTY') THEN 1 ELSE 0 END) as present
+                    FROM attendance_records WHERE studentId = ? AND organizationId = ? AND isDeleted = 0
+                `, [student.id, org.id]);
+
+                if (stats && stats.total >= 5) {
+                    const percentage = (stats.present / stats.total) * 100;
+                    if (percentage < 75) {
+                        // Student alert (deduplicated)
+                        if (!(await wasNotifiedRecently(student.id, 'Attendance Warning', 24))) {
+                            await triggerNotification(student.id, 'STUDENT', 'ATTENDANCE', 'Attendance Warning',
+                                `Your attendance is ${percentage.toFixed(1)}%. Minimum required is 75%.`,
+                                '/dashboard', org.id);
+                        }
+                        // Parent alert (deduplicated)
+                        const parents = await query('SELECT parentId FROM parent_student_relationships WHERE studentId = ?', [student.id]);
+                        for (const p of parents) {
+                            if (!(await wasNotifiedRecently(p.parentId, 'Low Attendance Warning', 24))) {
+                                await triggerNotification(p.parentId, 'PARENT', 'ATTENDANCE', 'Low Attendance Warning',
+                                    `Attendance alert: Your child's attendance is ${percentage.toFixed(1)}%.`,
+                                    '/dashboard', org.id);
+                            }
+                        }
+                    }
+                }
+
+                // Consecutive Absence Detection (3 days)
+                const recent = await query(`
+                    SELECT status FROM attendance_records 
+                    WHERE studentId = ? AND organizationId = ? AND isDeleted = 0 
+                    ORDER BY joinedAt DESC LIMIT 3
+                `, [student.id, org.id]);
+
+                if (recent.length === 3 && recent.every(r => r.status === 'ABSENT')) {
+                    const parents = await query('SELECT parentId FROM parent_student_relationships WHERE studentId = ?', [student.id]);
+                    for (const p of parents) {
+                        if (!(await wasNotifiedRecently(p.parentId, 'Consecutive Absence Alert', 24))) {
+                            await triggerNotification(p.parentId, 'PARENT', 'ATTENDANCE', 'Consecutive Absence Alert',
+                                `Your child has been absent for 3 consecutive days. Please contact the school.`,
+                                '/dashboard', org.id);
+                        }
+                    }
+                }
+
+                // Homework Reminder (due tomorrow, not yet submitted)
+                const tomorrow = new Date();
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+                const dueSoon = await query(`
+                    SELECT a.id, a.title FROM assignments a
+                    JOIN class_memberships m ON a.classId = m.classId
+                    LEFT JOIN submissions s ON a.id = s.assignmentId AND s.studentId = ?
+                    WHERE m.userId = ? AND a.dueDate LIKE ? AND s.id IS NULL AND a.isDeleted = 0
+                `, [student.id, student.id, `${tomorrowStr}%`]);
+
+                for (const hw of dueSoon) {
+                    if (!(await wasNotifiedRecently(student.id, 'Homework Due Tomorrow', 20))) {
+                        await triggerNotification(student.id, 'STUDENT', 'ASSIGNMENT', 'Homework Due Tomorrow',
+                            `Reminder: "${hw.title}" is due tomorrow.`, '/dashboard', org.id);
+                    }
+                }
+            }
+        }
+    } catch (err) {
+        console.error('[CRON-5PM ERROR]', err);
+    }
 });
 
 // Global Error Handler
@@ -1518,7 +2143,7 @@ app.use((err, req, res, next) => {
 
 // start server only when not running under tests
 if (process.env.NODE_ENV !== 'test') {
-    app.listen(PORT, () => console.log(`Classroom Server (SQLite) running on port ${PORT}`));
+    server.listen(PORT, () => console.log(`Classroom Server (SQLite) running on port ${PORT}`));
 }
 
 export default app;

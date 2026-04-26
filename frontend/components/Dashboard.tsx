@@ -3,6 +3,7 @@ import { AnimatePresence } from 'framer-motion';
 import { User, Class } from '../types';
 import ClassCard from './ClassCard';
 import { api } from '../service';
+import ChatPanel from './ChatPanel';
 import LeaveRequestForm from './LeaveRequestForm';
 import LeaveRequestList from './LeaveRequestList';
 import CalendarWidget from './CalendarWidget';
@@ -10,6 +11,10 @@ import AdminEventManagement from './AdminEventManagement';
 import NotificationPanel from './NotificationPanel';
 import PerformanceDashboard from './PerformanceDashboard';
 import ParentApprovalDashboard from './ParentApprovalDashboard';
+import HomeworkSystem from './HomeworkSystem';
+import NoDueSystem from './NoDueSystem';
+import AdminAttendanceReport from './attendance/AdminAttendanceReport';
+import AttendanceAnalytics from './attendance/AttendanceAnalytics';
 import { 
   AttendanceSummaryCard, 
   AssignmentsDueWidget, 
@@ -32,9 +37,10 @@ interface DashboardProps {
 const Dashboard: React.FC<DashboardProps> = ({ user, onClassSelect, classes, refreshClasses }) => {
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showJoinModal, setShowJoinModal] = useState(false);
+    const [chatWith, setChatWith] = useState<User | null>(null);
 
     // Dashboard Tab State
-    const [activeTab, setActiveTab] = useState<'overview' | 'classes' | 'requests' | 'calendar' | 'events' | 'performance'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'classes' | 'requests' | 'calendar' | 'events' | 'performance' | 'homework' | 'attendance-reports' | 'nodue'>('overview');
     const [showLeaveModal, setShowLeaveModal] = useState(false);
     const [showNotifications, setShowNotifications] = useState(false);
 
@@ -44,6 +50,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onClassSelect, classes, ref
     const [performanceData, setPerformanceData] = useState<any[]>([]);
     const [notifications, setNotifications] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    
+    // Parent multi-child state
+    const [linkedStudents, setLinkedStudents] = useState<any[]>([]);
+    const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
 
     // Create Class State
     const [newClassName, setNewClassName] = useState('');
@@ -55,14 +65,29 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onClassSelect, classes, ref
     const [joinCode, setJoinCode] = useState('');
 
     useEffect(() => {
+        if (user.role === 'PARENT') {
+            api.get('/parent/students').then(res => {
+                setLinkedStudents(res);
+                if (res.length > 0) setSelectedStudentId(res[0].id);
+            });
+        }
+    }, [user.role]);
+
+    useEffect(() => {
         const fetchDashboardData = async () => {
             if (activeTab !== 'overview') return;
             try {
                 setLoading(true);
+                const targetId = user.role === 'PARENT' ? selectedStudentId : user.id;
+                if (!targetId) {
+                    setLoading(false);
+                    return;
+                }
+
                 const [summaryRes, attendanceRes, performanceRes, notificationsRes] = await Promise.all([
-                    api.get('/dashboard/summary'),
-                    api.get(`/analytics/attendance/${user.id}`),
-                    api.get(`/analytics/performance/${user.id}`),
+                    api.get(`/dashboard/summary?userId=${targetId}`),
+                    api.get(`/analytics/attendance/${targetId}`),
+                    api.get(`/analytics/performance/${targetId}`),
                     api.get('/notifications')
                 ]);
                 setSummary(summaryRes);
@@ -76,7 +101,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onClassSelect, classes, ref
             }
         };
         fetchDashboardData();
-    }, [user.id, activeTab]);
+    }, [user.id, activeTab, selectedStudentId]);
 
     const handleMarkRead = async (id: string) => {
         try {
@@ -155,6 +180,38 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onClassSelect, classes, ref
 
     return (
         <div className="max-w-6xl mx-auto">
+            <div className="mb-8 p-6 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl text-white shadow-xl shadow-indigo-100 flex items-center justify-between">
+                <div>
+                    <h2 className="text-3xl font-bold">Welcome, {user.name}</h2>
+                    <p className="opacity-90 mt-1 flex items-center gap-2">
+                        <span className="px-2 py-0.5 bg-white/20 rounded text-xs font-bold uppercase tracking-wider">{user.role}</span>
+                        <span>Manage your activities and stay updated.</span>
+                    </p>
+                </div>
+                <div className="hidden sm:block">
+                    <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm border border-white/30">
+                        <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                    </div>
+                </div>
+                
+                {user.role === 'PARENT' && linkedStudents.length > 1 && (
+                    <div className="flex items-center gap-3 bg-white/10 p-2 rounded-xl border border-white/20 backdrop-blur-sm">
+                        <span className="text-sm font-medium ml-2">Switch Child:</span>
+                        <select 
+                            value={selectedStudentId || ''} 
+                            onChange={(e) => setSelectedStudentId(e.target.value)}
+                            className="bg-indigo-700 text-white border-none rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-white/50 outline-none cursor-pointer"
+                        >
+                            {linkedStudents.map(s => (
+                                <option key={s.id} value={s.id}>{s.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+            </div>
+
             <div className="flex justify-between items-center mb-6 border-b pb-4">
                 <div className="flex space-x-6">
                     <button
@@ -199,6 +256,28 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onClassSelect, classes, ref
                             Manage Events
                         </button>
                     )}
+                    {user.role === 'ADMIN' && (
+                        <button
+                            onClick={() => setActiveTab('attendance-reports')}
+                            className={`text-lg font-medium pb-4 -mb-4 border-b-2 transition-colors ${activeTab === 'attendance-reports' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                        >
+                            Attendance Reports
+                        </button>
+                    )}
+                    {(user.role === 'STUDENT' || user.role === 'PARENT') && (
+                        <button
+                            onClick={() => setActiveTab('homework')}
+                            className={`text-lg font-medium pb-4 -mb-4 border-b-2 transition-colors ${activeTab === 'homework' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                        >
+                            Homework
+                        </button>
+                    )}
+                    <button
+                        onClick={() => setActiveTab('nodue')}
+                        className={`text-lg font-medium pb-4 -mb-4 border-b-2 transition-colors ${activeTab === 'nodue' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                    >
+                        No-Due
+                    </button>
                 </div>
 
                 <div className="flex gap-3 items-center">
@@ -249,13 +328,26 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onClassSelect, classes, ref
                     </div>
                 ) : (
                     <div className="space-y-6">
+                        {(user.role === 'STUDENT' || user.role === 'PARENT') && (
+                            <AttendanceAnalytics studentId={user.role === 'PARENT' ? selectedStudentId || '' : user.id} />
+                        )}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            {attendanceData && (
-                                <AttendanceSummaryCard data={attendanceData} />
-                            )}
                             <AssignmentsDueWidget assignments={summary?.assignmentsDue || []} />
                             <UpcomingExamsWidget exams={summary?.upcomingExams || []} />
                         </div>
+                        
+                        {/* Attendance Alerts for Parents/Students */}
+                        {attendanceData?.percentage < 75 && (
+                            <div className="p-4 bg-rose-50 border border-rose-100 rounded-xl flex items-center gap-4 text-rose-800">
+                                <div className="p-2 bg-rose-100 rounded-lg">
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                                </div>
+                                <div>
+                                    <p className="font-bold">Low Attendance Warning</p>
+                                    <p className="text-sm opacity-90">Current attendance is {attendanceData.percentage.toFixed(1)}%. Please maintain at least 75%.</p>
+                                </div>
+                            </div>
+                        )}
                         
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                             <div className="lg:col-span-2">
@@ -270,14 +362,27 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onClassSelect, classes, ref
             ) : activeTab === 'classes' ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 justify-items-center sm:justify-items-start">
                     {classes.map((cls) => (
-                        <ClassCard
-                            key={cls.id}
-                            classData={cls}
-                            onClick={onClassSelect}
-                            onDelete={user.role === 'STAFF' ? handleDeleteClass : undefined}
-                            ownerName={cls['ownerName'] || 'Teacher'}
-                            ownerPhoto={cls['ownerPhoto']}
-                        />
+                        <div key={cls.id} className="relative group">
+                            <ClassCard
+                                classData={cls}
+                                onClick={onClassSelect}
+                                onDelete={user.role === 'STAFF' ? handleDeleteClass : undefined}
+                                ownerName={cls['ownerName'] || 'Teacher'}
+                                ownerPhoto={cls['ownerPhoto']}
+                            />
+                            {user.role === 'PARENT' && (
+                                <button 
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setChatWith({ id: cls.ownerId, name: cls['ownerName'] || 'Teacher', role: 'STAFF', email: '' } as User);
+                                    }}
+                                    className="absolute top-2 right-2 p-2 bg-white/90 rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-indigo-600 hover:text-white"
+                                    title="Message Teacher"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
+                                </button>
+                            )}
+                        </div>
                     ))}
                 </div>
             ) : activeTab === 'requests' ? (
@@ -288,9 +393,15 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onClassSelect, classes, ref
                 <CalendarWidget user={user} classes={classes} />
             ) : activeTab === 'performance' ? (
                 <div className="space-y-6">
-                    <PerformanceDashboard studentId={user.role === 'PARENT' ? user.studentId || '' : user.id} />
+                    <PerformanceDashboard studentId={user.role === 'PARENT' ? selectedStudentId || '' : user.id} />
                     {user.role === 'PARENT' && <ParentApprovalDashboard parentId={user.id} />}
                 </div>
+            ) : activeTab === 'homework' ? (
+                <HomeworkSystem user={user} studentId={user.role === 'PARENT' ? selectedStudentId || undefined : undefined} />
+            ) : activeTab === 'attendance-reports' ? (
+                <AdminAttendanceReport />
+            ) : activeTab === 'nodue' ? (
+                <NoDueSystem user={user} />
             ) : (
                 <AdminEventManagement classes={classes} />
             )}
@@ -378,6 +489,14 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onClassSelect, classes, ref
                     />
                 )}
             </AnimatePresence>
+            {/* Chat Panel */}
+            {chatWith && (
+                <ChatPanel 
+                    currentUser={user}
+                    otherUser={chatWith}
+                    onClose={() => setChatWith(null)}
+                />
+            )}
         </div>
     );
 };

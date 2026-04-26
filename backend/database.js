@@ -68,8 +68,37 @@ export async function initDatabase() {
       organizationId TEXT,
       photoUrl TEXT,
       isDeleted BOOLEAN DEFAULT 0,
+      isActive BOOLEAN DEFAULT 1,
+      refreshToken TEXT,
       createdAt TEXT,
       FOREIGN KEY(organizationId) REFERENCES organizations(id)
+    )`);
+
+  // Parent-Student Relationships
+  await run(`
+    CREATE TABLE IF NOT EXISTS parent_student_relationships (
+      id TEXT PRIMARY KEY,
+      parentId TEXT NOT NULL,
+      studentId TEXT NOT NULL,
+      relation TEXT, -- father, mother, guardian
+      organizationId TEXT,
+      createdAt TEXT,
+      FOREIGN KEY(parentId) REFERENCES users(id),
+      FOREIGN KEY(studentId) REFERENCES users(id),
+      FOREIGN KEY(organizationId) REFERENCES organizations(id)
+    )`);
+
+  // Real-time Messages
+  await run(`
+    CREATE TABLE IF NOT EXISTS messages (
+      id TEXT PRIMARY KEY,
+      senderId TEXT NOT NULL,
+      receiverId TEXT NOT NULL,
+      content TEXT NOT NULL,
+      isRead BOOLEAN DEFAULT 0,
+      createdAt TEXT,
+      FOREIGN KEY(senderId) REFERENCES users(id),
+      FOREIGN KEY(receiverId) REFERENCES users(id)
     )`);
 
   // Classes
@@ -278,14 +307,36 @@ export async function initDatabase() {
       FOREIGN KEY(organizationId) REFERENCES organizations(id)
     )`);
 
-  // Migration: Add parentId to users
+  // Migration: Add parentId, isActive, and refreshToken to users
   try {
     const tableInfo = await query("PRAGMA table_info(users)");
     if (!tableInfo.find(col => col.name === 'parentId')) {
       await run("ALTER TABLE users ADD COLUMN parentId TEXT REFERENCES users(id)");
     }
+    if (!tableInfo.find(col => col.name === 'isActive')) {
+      await run("ALTER TABLE users ADD COLUMN isActive BOOLEAN DEFAULT 1");
+    }
+    if (!tableInfo.find(col => col.name === 'refreshToken')) {
+      await run("ALTER TABLE users ADD COLUMN refreshToken TEXT");
+    }
+    if (!tableInfo.find(col => col.name === 'phoneNumber')) {
+      await run("ALTER TABLE users ADD COLUMN phoneNumber TEXT");
+    }
   } catch (err) {
-    console.error("Migration (users.parentId) failed:", err);
+    console.error("Migration (users security upgrade) failed:", err);
+  }
+
+  // Migration: Add parent approval fields to leave_requests
+  try {
+    const tableInfo = await query("PRAGMA table_info(leave_requests)");
+    if (!tableInfo.find(col => col.name === 'parentApprovalStatus')) {
+      await run("ALTER TABLE leave_requests ADD COLUMN parentApprovalStatus TEXT DEFAULT 'PENDING'");
+    }
+    if (!tableInfo.find(col => col.name === 'parentRemarks')) {
+      await run("ALTER TABLE leave_requests ADD COLUMN parentRemarks TEXT");
+    }
+  } catch (err) {
+    console.error("Migration (leave_requests parent approval) failed:", err);
   }
 
   // Migration: Add remarks to attendance_records
@@ -359,7 +410,27 @@ export async function initDatabase() {
       FOREIGN KEY(organizationId) REFERENCES organizations(id)
     )`);
 
-  // Migration: Add parentApprovalStatus to leave_requests
+  // No-Due Requests
+  await run(`
+    CREATE TABLE IF NOT EXISTS no_due_requests (
+      id TEXT PRIMARY KEY,
+      studentId TEXT NOT NULL,
+      organizationId TEXT,
+      reason TEXT,
+      status TEXT DEFAULT 'PENDING', -- PENDING, TEACHER_APPROVED, COMPLETED, REJECTED
+      teacherReviewedBy TEXT,
+      teacherReviewedAt TEXT,
+      teacherRemarks TEXT,
+      adminReviewedBy TEXT,
+      adminReviewedAt TEXT,
+      adminRemarks TEXT,
+      isDeleted BOOLEAN DEFAULT 0,
+      createdAt TEXT,
+      FOREIGN KEY(studentId) REFERENCES users(id),
+      FOREIGN KEY(teacherReviewedBy) REFERENCES users(id),
+      FOREIGN KEY(adminReviewedBy) REFERENCES users(id),
+      FOREIGN KEY(organizationId) REFERENCES organizations(id)
+    )`);
   try {
     const tableInfo = await query("PRAGMA table_info(leave_requests)");
     if (!tableInfo.find(col => col.name === 'parentApprovalStatus')) {
@@ -378,6 +449,16 @@ export async function initDatabase() {
   } catch (err) {
     console.error("Migration (school_events.color) failed:", err);
   }
+
+  // Performance Indices for Attendance
+  await run('CREATE INDEX IF NOT EXISTS idx_attendance_records_student ON attendance_records (studentId, status)');
+  await run('CREATE INDEX IF NOT EXISTS idx_attendance_records_session ON attendance_records (sessionId)');
+  await run('CREATE INDEX IF NOT EXISTS idx_attendance_sessions_class_date ON attendance_sessions (classId, startTime)');
+  await run('CREATE INDEX IF NOT EXISTS idx_attendance_records_org_date ON attendance_records (organizationId, createdAt)');
+  await run('CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications (userId, isRead, createdAt)');
+
+  // Migration: Add unique constraint index for duplicate session prevention
+  await run('CREATE UNIQUE INDEX IF NOT EXISTS idx_attendance_sessions_unique_class_desc ON attendance_sessions (classId, description) WHERE isDeleted = 0');
 
   // No default data seeded automatically in this environment
 }

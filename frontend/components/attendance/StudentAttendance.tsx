@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../service';
 import { AttendanceRecord, Class, AttendanceSession } from '../../types';
+import AttendanceAnalytics from './AttendanceAnalytics';
 
 interface StudentAttendanceProps {
     classData: Class;
@@ -109,20 +110,7 @@ const StudentAttendance: React.FC<StudentAttendanceProps> = ({ classData, userId
             )}
 
             {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm text-center">
-                    <div className="text-4xl font-black text-gray-900 mb-1">{percentage}%</div>
-                    <div className="text-sm font-medium text-gray-500 uppercase tracking-wide">Attendance</div>
-                </div>
-                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm text-center">
-                    <div className="text-4xl font-black text-green-600 mb-1">{presentCount}</div>
-                    <div className="text-sm font-medium text-gray-500 uppercase tracking-wide">Present</div>
-                </div>
-                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm text-center">
-                    <div className="text-4xl font-black text-gray-600 mb-1">{totalSessions}</div>
-                    <div className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Sessions</div>
-                </div>
-            </div>
+            <AttendanceAnalytics studentId={userId} />
 
             {/* History List */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">

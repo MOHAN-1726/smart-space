@@ -1,43 +1,25 @@
 import { logger } from './utils/logger';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
-// Diagnostic function to check stored user data
-export const checkTokenStatus = () => {
-    const storedUser = localStorage.getItem('currentUser');
-    logger.debug('[DIAGNOSTIC] Checking token status...');
-    logger.debug('[DIAGNOSTIC] Stored user data:', storedUser ? JSON.parse(storedUser) : 'NO DATA');
-    if (storedUser) {
-        try {
-            const user = JSON.parse(storedUser);
-            logger.debug('[DIAGNOSTIC] User email:', user.email);
-            logger.debug('[DIAGNOSTIC] User role:', user.role);
-            logger.debug('[DIAGNOSTIC] Has token:', !!user.token);
-            logger.debug('[DIAGNOSTIC] Token preview:', user.token ? user.token.substring(0, 20) + '...' : 'NO TOKEN');
-            return user;
-        } catch (e) {
-            logger.error('[DIAGNOSTIC] Failed to parse stored user:', e);
-            return null;
-        }
-    }
-    logger.warn('[DIAGNOSTIC] No user data stored in localStorage');
-    return null;
+// Guard against concurrent refresh attempts
+let isRefreshing = false;
+let refreshSubscribers: Array<(success: boolean) => void> = [];
+
+const onRefreshComplete = (success: boolean) => {
+    refreshSubscribers.forEach(cb => cb(success));
+    refreshSubscribers = [];
+};
+
+const waitForRefresh = (): Promise<boolean> => {
+    return new Promise(resolve => {
+        refreshSubscribers.push(resolve);
+    });
 };
 
 const getHeaders = (isFormData: boolean = false) => {
     const headers: Record<string, string> = {};
     if (!isFormData) {
         headers['Content-Type'] = 'application/json';
-    }
-    const storedUser = localStorage.getItem('currentUser');
-    if (storedUser) {
-        try {
-            const user = JSON.parse(storedUser);
-            if (user.token) {
-                headers['Authorization'] = `Bearer ${user.token}`;
-            }
-        } catch (e) {
-            logger.error('Failed to parse user token', e);
-        }
     }
     return headers;
 };
@@ -50,9 +32,7 @@ const fetchWithAuth = async (endpoint: string, options: RequestInit = {}): Promi
 
     logger.debug('[API] Request started:', {
         endpoint,
-        method: options.method || 'GET',
-        hasToken: !!headers['Authorization'],
-        contentType: headers['Content-Type']
+        method: options.method || 'GET'
     });
 
     const maxRetries = 2;
@@ -63,7 +43,8 @@ const fetchWithAuth = async (endpoint: string, options: RequestInit = {}): Promi
         try {
             response = await fetch(`${API_BASE_URL}${endpoint}`, {
                 ...options,
-                headers
+                headers,
+                credentials: 'include' // Mandatory for cookie-based auth
             });
             break;
         } catch (err: any) {
@@ -87,47 +68,48 @@ const fetchWithAuth = async (endpoint: string, options: RequestInit = {}): Promi
         statusText: response.statusText
     });
 
-    if (response.status === 401 && endpoint !== '/login' && endpoint !== '/register') {
+    if (response.status === 401 && endpoint !== '/login' && endpoint !== '/register' && endpoint !== '/refresh') {
         logger.info('[API] Got 401, attempting token refresh...');
-        const storedUser = localStorage.getItem('currentUser');
-        if (!storedUser) {
-            logger.warn('[API] No stored user for refresh, logging out...');
-            localStorage.removeItem('currentUser');
-            window.location.reload();
-            return Promise.reject(new Error('Session expired'));
+
+        let refreshSuccess = false;
+
+        if (isRefreshing) {
+            // Another request is already refreshing — wait for it
+            logger.debug('[API] Refresh already in progress, waiting...');
+            refreshSuccess = await waitForRefresh();
+        } else {
+            isRefreshing = true;
+            try {
+                const refreshRes = await fetch(`${API_BASE_URL}/refresh`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include'
+                });
+                refreshSuccess = refreshRes.ok;
+            } catch (e) {
+                refreshSuccess = false;
+            } finally {
+                isRefreshing = false;
+                onRefreshComplete(refreshSuccess);
+            }
         }
 
-        const user = JSON.parse(storedUser);
-        const refreshRes = await fetch(`${API_BASE_URL}/refresh`, { 
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ refreshToken: user.refreshToken || user.token || user.accessToken }) 
-        });
-        if (refreshRes.ok) {
-            const data = await refreshRes.json();
-            const storedUser = localStorage.getItem('currentUser');
-            if (storedUser) {
-                const user = JSON.parse(storedUser);
-                user.token = data.accessToken;
-                user.refreshToken = data.refreshToken; // Also update refresh token if returned
-                localStorage.setItem('currentUser', JSON.stringify(user));
-                logger.info('[API] Token refreshed, retrying request...');
-
-                // Retry
-                response = await fetch(`${API_BASE_URL}${endpoint}`, {
-                    ...options,
-                    headers: {
-                        ...getHeaders(options.body instanceof FormData),
-                        ...options.headers
-                    }
-                });
-            }
+        if (refreshSuccess) {
+            logger.info('[API] Token refreshed, retrying request...');
+            // Retry original request (only once — do not re-enter refresh logic)
+            response = await fetch(`${API_BASE_URL}${endpoint}`, {
+                ...options,
+                headers: {
+                    ...getHeaders(options.body instanceof FormData),
+                    ...options.headers
+                },
+                credentials: 'include'
+            });
         } else {
             logger.warn('[API] Token refresh failed, logging out...');
             localStorage.removeItem('currentUser');
             const ev = new CustomEvent('auth-expired');
             window.dispatchEvent(ev);
-            window.location.reload();
             return Promise.reject(new Error('Session expired, logging out...'));
         }
     }
@@ -156,8 +138,33 @@ export const api = {
     },
 
     // Auth
+    getStudentAttendanceAnalytics: (studentId: string) => api.get(`/attendance/analytics/${studentId}`),
+    getAttendanceAnalyticsDetailed: (studentId: string) => api.get(`/attendance/analytics/${studentId}`),
+    getAdminAttendanceClasses: () => api.get('/admin/attendance/classes'),
+    getAdminAttendanceReport: (filters: any) => {
+        const query = new URLSearchParams(
+            Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '' && v !== null && v !== undefined))
+        ).toString();
+        return api.get(`/admin/attendance/report?${query}`);
+    },
+    downloadAttendanceReportCSV: async (filters: any) => {
+        const params = new URLSearchParams(
+            Object.fromEntries(Object.entries({ ...filters, format: 'csv' }).filter(([, v]) => v !== '' && v !== null && v !== undefined))
+        ).toString();
+        const res = await fetch(`${API_BASE_URL}/admin/attendance/report?${params}`, {
+            credentials: 'include'
+        });
+        if (!res.ok) throw new Error('CSV download failed');
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `attendance_report_${new Date().toISOString().split('T')[0]}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    },
     logout: async () => {
-        return fetch(`${API_BASE_URL}/logout`, { method: 'POST', headers: getHeaders() });
+        return fetch(`${API_BASE_URL}/logout`, { method: 'POST', headers: getHeaders(), credentials: 'include' });
     },
 
     get: async (endpoint: string) => {
@@ -238,5 +245,15 @@ export const api = {
     },
     getBookings: async (userId: string) => {
         return api.get(`/bookings/${userId}`);
+    }
+};
+
+// Utility: Check current token status (used by App.tsx on mount)
+export const checkTokenStatus = async (): Promise<{ valid: boolean; user: any | null }> => {
+    try {
+        const user = await api.get('/me');
+        return { valid: true, user };
+    } catch {
+        return { valid: false, user: null };
     }
 };

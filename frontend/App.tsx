@@ -30,29 +30,22 @@ const App: React.FC = () => {
       setTheme(prefersDark ? 'dark' : 'light');
     }
 
-    // Simulate checking for a logged-in user session (persisted client-side)
-    const storedUser = localStorage.getItem('currentUser');
-    // use logger for quieter production — load async inside effect
-    (async () => {
+    // Security Upgrade: Verify session with /api/me
+    const verifySession = async () => {
       try {
-        const mod = await import('./utils/logger');
-        const logger = mod.logger;
-        logger.debug('[APP] Checking for stored user...');
-        if (storedUser) {
-          const user = JSON.parse(storedUser);
-          logger.debug('[APP] User found:', { email: user.email, role: user.role });
-          setCurrentUser(user);
-          // Verify token status
-          import('./service').then(m => m.checkTokenStatus()).catch(() => {});
-        } else {
-          logger.debug('[APP] No user stored in localStorage');
-        }
-      } catch (e) {
-        // fallback to console
-        console.log('[APP] Checking for stored user (fallback)');
+        const user = await api.get('/me');
+        setCurrentUser(user);
+        localStorage.setItem('currentUser', JSON.stringify(user)); // Store UI-relevant data only
+      } catch (err) {
+        // Not logged in or session expired
+        setCurrentUser(null);
+        localStorage.removeItem('currentUser');
+      } finally {
+        setLoading(false);
       }
-    })();
-    setLoading(false);
+    };
+    
+    verifySession();
   }, []);
 
   useEffect(() => {
@@ -106,10 +99,12 @@ const App: React.FC = () => {
   const handleLogin = useCallback(async (email: string, password?: string): Promise<boolean> => {
     try {
       const response = await api.post('/login', { email, password });
-      const userObj = { ...response, token: response.accessToken };
-      setCurrentUser(userObj);
-      localStorage.setItem('currentUser', JSON.stringify(userObj));
-      return true;
+      if (response.success && response.user) {
+        setCurrentUser(response.user);
+        localStorage.setItem('currentUser', JSON.stringify(response.user));
+        return true;
+      }
+      return false;
     } catch (error) {
       import('./utils/logger').then(m => m.logger.error('Login failed:', error)).catch(() => {});
       return false;
@@ -121,9 +116,8 @@ const App: React.FC = () => {
       const result = await api.post('/register', { name, email, role, password });
 
       if (result.success && result.user) {
-        const userObj = { ...result.user, token: result.accessToken };
-        setCurrentUser(userObj);
-        localStorage.setItem('currentUser', JSON.stringify(userObj));
+        setCurrentUser(result.user);
+        localStorage.setItem('currentUser', JSON.stringify(result.user));
       }
 
       return result;

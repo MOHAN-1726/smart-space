@@ -182,6 +182,23 @@ export interface LeaveRequest {
   createdAt: string;
 }
 
+export interface NoDueRequest {
+  id: string;
+  studentId: string;
+  studentName?: string;
+  studentEmail?: string;
+  organizationId: string;
+  reason?: string;
+  status: 'PENDING' | 'TEACHER_APPROVED' | 'COMPLETED' | 'REJECTED';
+  teacherRemarks?: string;
+  teacherReviewedBy?: string;
+  teacherReviewedAt?: string;
+  adminRemarks?: string;
+  adminReviewedBy?: string;
+  adminReviewedAt?: string;
+  createdAt: string;
+}
+
 export interface Notification {
   id: string;
   userId: string;
