@@ -1,89 +1,39 @@
-
 import React, { useState, useCallback, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import ClassDetail from './components/ClassDetail';
 import Layout from './components/Layout';
 import { User, Role, Class } from './types';
-import { api, checkTokenStatus } from './service';
-
-type Theme = 'light' | 'dark';
+import { api } from './service';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [theme, setTheme] = useState<Theme>('light');
-
-  // View State
-  const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
-  const [currentClass, setCurrentClass] = useState<Class | null>(null);
   const [classes, setClasses] = useState<Class[]>([]);
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
   useEffect(() => {
-    // Check for saved theme in localStorage
-    const savedTheme = localStorage.getItem('theme') as Theme | null;
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-
-    if (savedTheme) {
-      setTheme(savedTheme);
-    } else {
-      setTheme(prefersDark ? 'dark' : 'light');
-    }
-
-    // Security Upgrade: Verify session with /api/me
     const verifySession = async () => {
       try {
         const user = await api.get('/me');
         setCurrentUser(user);
-        localStorage.setItem('currentUser', JSON.stringify(user)); // Store UI-relevant data only
       } catch (err) {
-        // Not logged in or session expired
         setCurrentUser(null);
-        localStorage.removeItem('currentUser');
       } finally {
         setLoading(false);
       }
     };
-    
     verifySession();
   }, []);
 
-  useEffect(() => {
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-    localStorage.setItem('theme', theme);
-  }, [theme]);
-
-  // Fetch class details when selected
-  useEffect(() => {
-    const fetchClassDetails = async () => {
-      if (selectedClassId && currentUser) {
-        try {
-          const data = await api.get(`/classes/${selectedClassId}?userId=${currentUser.id}`);
-          setCurrentClass(data);
-        } catch (err) {
-          import('./utils/logger').then(m => m.logger.error('Failed to fetch class', err)).catch(() => {});
-          setCurrentClass(null);
-          setSelectedClassId(null);
-        }
-      } else {
-        setCurrentClass(null);
-      }
-    };
-    fetchClassDetails();
-  }, [selectedClassId, currentUser]);
-
-  // Fetch all classes for the user
   const fetchClasses = useCallback(async () => {
     if (currentUser) {
       try {
         const data = await api.get(`/users/${currentUser.id}/classes`);
         setClasses(data);
       } catch (err) {
-        import('./utils/logger').then(m => m.logger.error('Failed to fetch classes', err)).catch(() => {});
+        console.error('Failed to fetch classes', err);
       }
     }
   }, [currentUser]);
@@ -92,102 +42,43 @@ const App: React.FC = () => {
     fetchClasses();
   }, [fetchClasses]);
 
-  const toggleTheme = () => {
-    setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
-  };
-
-  const handleLogin = useCallback(async (email: string, password?: string): Promise<boolean> => {
-    try {
-      const response = await api.post('/login', { email, password });
-      if (response.success && response.user) {
-        setCurrentUser(response.user);
-        localStorage.setItem('currentUser', JSON.stringify(response.user));
-        return true;
-      }
-      return false;
-    } catch (error) {
-      import('./utils/logger').then(m => m.logger.error('Login failed:', error)).catch(() => {});
-      return false;
-    }
-  }, []);
-
-  const handleRegister = useCallback(async (name: string, email: string, role: Role, password?: string): Promise<{ success: boolean; message: string }> => {
-    try {
-      const result = await api.post('/register', { name, email, role, password });
-
-      if (result.success && result.user) {
-        setCurrentUser(result.user);
-        localStorage.setItem('currentUser', JSON.stringify(result.user));
-      }
-
-      return result;
-    } catch (error: any) {
-      import('./utils/logger').then(m => m.logger.error('Registration failed:', error)).catch(() => {});
-      return { success: false, message: error.message || 'Registration failed' };
-    }
-  }, []);
-
-
   const handleLogout = useCallback(async () => {
     try {
       await api.logout();
-    } catch (e) { }
+    } catch (e) {}
     setCurrentUser(null);
-    setSelectedClassId(null);
-    setCurrentClass(null);
-    localStorage.removeItem('currentUser');
-  }, []);
-
-  const handleUpdateUser = useCallback(async (updatedUser: User) => {
-    try {
-      const result = await api.put(`/users/${updatedUser.id}`, updatedUser);
-      setCurrentUser(result);
-      localStorage.setItem('currentUser', JSON.stringify(result));
-    } catch (error) {
-      import('./utils/logger').then(m => m.logger.error('Failed to update user:', error)).catch(() => {});
-    }
   }, []);
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="text-xl font-medium text-gray-500">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
       </div>
     );
   }
 
-  // If not logged in, show Login
-  if (!currentUser) {
-    return <Login onLogin={handleLogin} onRegister={handleRegister} />;
-  }
-
-  // If logged in, show Layout with either Dashboard or ClassDetail
   return (
-    <Layout
-      user={currentUser}
-      onLogout={handleLogout}
-      title={currentClass ? currentClass.name : "Classroom"}
-      classes={classes}
-    >
-      {selectedClassId && currentClass ? (
-        <ClassDetail
-          classData={currentClass}
-          user={currentUser}
-          onBack={() => setSelectedClassId(null)}
+    <BrowserRouter>
+      <Routes>
+        <Route 
+          path="/login" 
+          element={currentUser ? <Navigate to={`/${currentUser.role.toLowerCase()}`} replace /> : <Login onLoginSuccess={setCurrentUser} />} 
         />
-      ) : (
-        <Dashboard
-          user={currentUser}
-          onLogout={handleLogout}
-          theme={theme}
-          toggleTheme={toggleTheme}
-          updateUser={handleUpdateUser}
-          onClassSelect={setSelectedClassId}
-          classes={classes}
-          refreshClasses={fetchClasses}
-        />
-      )}
-    </Layout>
+        
+        {currentUser ? (
+          <Route path="/" element={<Layout user={currentUser} onLogout={handleLogout} title="Classroom" classes={classes} />}>
+            <Route path="admin" element={currentUser.role === Role.ADMIN ? <Dashboard user={currentUser} onLogout={handleLogout} theme={theme} toggleTheme={() => setTheme(t => t === 'light' ? 'dark' : 'light')} updateUser={setCurrentUser} onClassSelect={() => {}} classes={classes} refreshClasses={fetchClasses} /> : <Navigate to="/login" />} />
+            <Route path="teacher" element={currentUser.role === Role.STAFF ? <Dashboard user={currentUser} onLogout={handleLogout} theme={theme} toggleTheme={() => setTheme(t => t === 'light' ? 'dark' : 'light')} updateUser={setCurrentUser} onClassSelect={() => {}} classes={classes} refreshClasses={fetchClasses} /> : <Navigate to="/login" />} />
+            <Route path="student" element={currentUser.role === Role.STUDENT ? <Dashboard user={currentUser} onLogout={handleLogout} theme={theme} toggleTheme={() => setTheme(t => t === 'light' ? 'dark' : 'light')} updateUser={setCurrentUser} onClassSelect={() => {}} classes={classes} refreshClasses={fetchClasses} /> : <Navigate to="/login" />} />
+            <Route path="parent" element={currentUser.role === Role.PARENT ? <Dashboard user={currentUser} onLogout={handleLogout} theme={theme} toggleTheme={() => setTheme(t => t === 'light' ? 'dark' : 'light')} updateUser={setCurrentUser} onClassSelect={() => {}} classes={classes} refreshClasses={fetchClasses} /> : <Navigate to="/login" />} />
+            <Route path="class/:classId" element={<ClassDetail user={currentUser} classes={classes} onBack={() => window.history.back()} />} />
+            <Route index element={<Navigate to={`/${currentUser.role.toLowerCase()}`} replace />} />
+          </Route>
+        ) : (
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        )}
+      </Routes>
+    </BrowserRouter>
   );
 };
 

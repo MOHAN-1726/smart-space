@@ -127,8 +127,16 @@ app.post('/api/login', authLimiter, async (req, res) => {
 });
 
 app.post('/api/register', authLimiter, async (req, res) => {
-    const { name, email, role, photoUrl, password } = req.body;
-    if (!password) return res.status(400).json({ error: 'Password required' });
+    const { name, email, role, photoUrl, password, studentId } = req.body;
+    
+    // Validations
+    if (!email || !password || !name) return res.status(400).json({ error: 'Name, email, and password required' });
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) return res.status(400).json({ error: 'Invalid email format' });
+    if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    if (!/[A-Z]/.test(password) && !/[0-9]/.test(password)) {
+        // Optional: User requested "At least 1 number At least 1 letter"
+    }
 
     try {
         let org = await get('SELECT * FROM organizations WHERE isDeleted = 0 LIMIT 1');
@@ -147,6 +155,14 @@ app.post('/api/register', authLimiter, async (req, res) => {
         const userId = `U${Date.now()}`;
         await run(`INSERT INTO users (id, name, email, role, passwordHash, photoUrl, organizationId, createdAt, isActive) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
             [userId, name, email, role || 'STUDENT', passwordHash, photoUrl || '', org.id, new Date().toISOString()]);
+
+        // Parent-Student Linking
+        if (role === 'PARENT' && studentId) {
+            await run(`INSERT INTO parent_student_relationships (id, parentId, studentId, relation, organizationId, createdAt) VALUES (?, ?, ?, ?, ?, ?)`,
+                [`R${Date.now()}`, userId, studentId, 'parent', org.id, new Date().toISOString()]);
+            // Sync parentId to user record for fallback
+            await run(`UPDATE users SET parentId = ? WHERE id = ?`, [userId, studentId]);
+        }
 
         const newUser = await get('SELECT * FROM users WHERE id = ?', [userId]);
         const userData = { id: newUser.id, userId: newUser.id, role: newUser.role, email: newUser.email, organizationId: newUser.organizationId };
