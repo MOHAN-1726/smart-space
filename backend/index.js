@@ -26,11 +26,26 @@ const app = express();
 const server = createServer(app);
 const allowedOrigins = [
     "http://localhost:5173",
-    "https://smart-space-omoh.onrender.com"
+    "http://localhost:5174",
+    "https://smart-space-omoh.onrender.com",
+    "https://smart-space-map.vercel.app"
 ];
 
+if (process.env.FRONTEND_URL && !allowedOrigins.includes(process.env.FRONTEND_URL)) {
+    allowedOrigins.push(process.env.FRONTEND_URL);
+}
+
 const io = new Server(server, {
-    cors: { origin: process.env.FRONTEND_URL || 'http://localhost:5173', credentials: true }
+    cors: { 
+        origin: (origin, callback) => {
+            if (!origin || allowedOrigins.includes(origin)) {
+                callback(null, true);
+            } else {
+                callback(new Error('Not allowed by CORS'));
+            }
+        },
+        credentials: true 
+    }
 });
 
 io.on("connection", (socket) => {
@@ -46,7 +61,16 @@ app.set('trust proxy', 1);
 app.use(requestID());
 app.use(compression());
 app.use(helmet());
-app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:5173', credentials: true }));
+app.use(cors({
+    origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true
+}));
 app.use(express.json());
 app.use(cookieParser());
 
