@@ -26,7 +26,7 @@ const app = express();
 const server = createServer(app);
 const allowedOrigins = [
     "http://localhost:5173",
-    "https://smart-space-map.vercel.app"
+    "https://smart-space-omoh.onrender.com"
 ];
 
 const io = new Server(server, {
@@ -109,7 +109,7 @@ const upload = multer({
     fileFilter: (req, file, cb) => {
         const allowedMimeTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
         const allowedExtensions = /\.(pdf|jpg|jpeg|png|doc|docx)$/i;
-        
+
         if (allowedMimeTypes.includes(file.mimetype) && allowedExtensions.test(file.originalname)) {
             cb(null, true);
         } else {
@@ -199,7 +199,7 @@ app.post('/api/login', authLimiter, async (req, res) => {
 
 app.post('/api/register', authLimiter, async (req, res) => {
     const { name, email, role, photoUrl, password, studentId } = req.body;
-    
+
     // Validations
     if (!email || !password || !name) return res.status(400).json({ error: 'Name, email, and password required' });
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -242,7 +242,7 @@ app.post('/api/register', authLimiter, async (req, res) => {
         const refreshToken = jwt.sign({ ...userData, salt: Math.random().toString(36) }, REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
 
         await run(`INSERT INTO refresh_tokens (id, userId, organizationId, token, expiresAt) VALUES (?, ?, ?, ?, ?)`,
-            [`RT${Date.now()}_${Math.random().toString(36).substring(2,7)}`, newUser.id, newUser.organizationId, refreshToken, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()]);
+            [`RT${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, newUser.id, newUser.organizationId, refreshToken, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()]);
 
         res.cookie('accessToken', accessToken, { httpOnly: true, secure: isProd, sameSite: 'strict', maxAge: 15 * 60 * 1000 });
         res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: isProd, sameSite: 'strict', maxAge: 7 * 24 * 60 * 60 * 1000 });
@@ -269,7 +269,7 @@ app.post('/api/register-parent', requireRole(['ADMIN']), async (req, res) => {
         const salt = await bcrypt.genSalt(10);
         const passwordHash = await bcrypt.hash(password, salt);
         const parentId = `P${Date.now()}`;
-        
+
         await run(`INSERT INTO users (id, name, email, role, passwordHash, organizationId, createdAt, isActive) VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
             [parentId, name, email, 'PARENT', passwordHash, student.organizationId, new Date().toISOString()]);
 
@@ -303,7 +303,7 @@ app.post('/api/refresh', async (req, res) => {
 
         await run('UPDATE refresh_tokens SET revoked = 1 WHERE id = ?', [dbToken.id]);
         await run(`INSERT INTO refresh_tokens (id, userId, organizationId, token, expiresAt) VALUES (?, ?, ?, ?, ?)`,
-            [`RT${Date.now()}_${Math.random().toString(36).substring(2,7)}`, user.id, user.organizationId, newRefreshToken, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()]);
+            [`RT${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, user.id, user.organizationId, newRefreshToken, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()]);
 
         res.cookie('accessToken', newAccessToken, { httpOnly: true, secure: isProd, sameSite: 'strict', maxAge: 15 * 60 * 1000 });
         res.cookie('refreshToken', newRefreshToken, { httpOnly: true, secure: isProd, sameSite: 'strict', maxAge: 7 * 24 * 60 * 60 * 1000 });
@@ -340,7 +340,7 @@ app.post('/api/classes', requireRole(['ADMIN', 'STAFF']), async (req, res) => {
         await run(`INSERT INTO classes (id, name, section, subject, room, description, ownerId, theme, organizationId, enrollmentCode, createdAt) 
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [classId, name, section, subject, room, description, ownerId, theme || 'theme-blue', req.user.organizationId, enrollmentCode, new Date().toISOString()]);
-        
+
         await run(`INSERT INTO class_memberships (id, userId, classId, role) VALUES (?, ?, ?, ?)`,
             [`M${Date.now()}_${Math.random().toString(36).substr(2, 4)}`, ownerId, classId, 'STAFF']);
 
@@ -354,11 +354,11 @@ app.post('/api/classes', requireRole(['ADMIN', 'STAFF']), async (req, res) => {
 app.post('/api/classes/join', async (req, res) => {
     const { enrollmentCode } = req.body;
     const userId = req.user.userId || req.user.id;
-    console.log('[JOIN] CRITICAL DEBUG:', { 
-        body: req.body, 
-        user: { id: req.user.id, userId: req.user.userId, orgId: req.user.organizationId } 
+    console.log('[JOIN] CRITICAL DEBUG:', {
+        body: req.body,
+        user: { id: req.user.id, userId: req.user.userId, orgId: req.user.organizationId }
     });
-    
+
     try {
         const cls = await get('SELECT * FROM classes WHERE enrollmentCode = ? AND organizationId = ? AND isDeleted = 0', [enrollmentCode, req.user.organizationId]);
         if (!cls) {
@@ -376,12 +376,12 @@ app.post('/api/classes/join', async (req, res) => {
 
         const mId = `M${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
         console.log('[JOIN] STEP: Inserting membership:', { id: mId, userId, classId: cls.id });
-        
+
         const result = await run(`INSERT INTO class_memberships (id, userId, classId, role) VALUES (?, ?, ?, ?)`,
             [mId, userId, cls.id, 'STUDENT']);
 
         console.log('[JOIN] SUCCESS: Membership result:', result);
-        
+
         // Verification SELECT
         const verified = await get('SELECT * FROM class_memberships WHERE id = ?', [mId]);
         console.log('[JOIN] VERIFICATION:', verified ? 'FOUND' : 'NOT FOUND!');
@@ -429,7 +429,7 @@ app.get('/api/users/:userId/classes', async (req, res) => {
 
         console.log('[CLASSES] Found classes count:', classes.length);
         res.json(classes);
-    } catch (err) { 
+    } catch (err) {
         console.error('[CLASSES] Error fetching classes:', err);
         if (err.stack) console.error(err.stack);
         res.status(500).json({ error: 'Failed to fetch classes', details: err.message, stack: err.stack });
@@ -494,7 +494,7 @@ app.get('/api/classes/:classId', async (req, res) => {
     try {
         const cls = await get('SELECT * FROM classes WHERE id = ? AND organizationId = ? AND isDeleted = 0', [req.params.classId, req.user.organizationId]);
         if (!cls) return res.status(404).json({ error: 'Not found' });
-        
+
         if (req.query.userId) {
             const member = await get('SELECT role FROM class_memberships WHERE classId = ? AND userId = ?', [req.params.classId, req.query.userId]);
             cls.role = member ? member.role : null;
@@ -575,10 +575,10 @@ app.post('/api/classes/:classId/announce', async (req, res) => {
         const id = `AN${Date.now()}`;
         const createdAt = new Date().toISOString();
         const { authorId, content, attachments } = req.body;
-        
+
         await run(`INSERT INTO announcements (id, classId, authorId, content, organizationId, createdAt) VALUES (?, ?, ?, ?, ?, ?)`,
             [id, req.params.classId, authorId, content, req.user.organizationId, createdAt]);
-        
+
         if (attachments && Array.isArray(attachments)) {
             for (const att of attachments) {
                 const attId = `ATT${Date.now()}_${Math.random().toString(36).substring(2, 5)}`;
@@ -586,19 +586,19 @@ app.post('/api/classes/:classId/announce', async (req, res) => {
                     [attId, id, 'ANNOUNCEMENT', att.name, att.url, att.size, att.type]);
             }
         }
-        
+
         const author = await get('SELECT name FROM users WHERE id = ?', [authorId]);
         const cls = await get('SELECT name FROM classes WHERE id = ?', [req.params.classId]);
         const members = await query('SELECT userId FROM class_memberships WHERE classId = ? AND userId != ?', [req.params.classId, authorId]);
-        
+
         for (const m of members) {
             await triggerNotification(m.userId, 'STUDENT', 'ANNOUNCEMENT', 'New Announcement', `${author.name} posted in ${cls.name}`, `/dashboard`, req.user.organizationId);
         }
 
         res.json({ success: true, id, createdAt });
-    } catch (err) { 
+    } catch (err) {
         console.error(err);
-        res.status(500).json({ error: 'Failed to post announcement' }); 
+        res.status(500).json({ error: 'Failed to post announcement' });
     }
 });
 
@@ -628,7 +628,7 @@ app.post('/api/comments', async (req, res) => {
         const createdAt = new Date().toISOString();
         await run(`INSERT INTO comments (id, parentId, authorId, content, organizationId, createdAt) VALUES (?, ?, ?, ?, ?, ?)`,
             [id, req.body.parentId, req.body.authorId, req.body.content, req.user.organizationId, createdAt]);
-        
+
         const author = await get('SELECT name, photoUrl FROM users WHERE id = ?', [req.body.authorId]);
         res.json({ success: true, id, createdAt, authorName: author.name, authorPhoto: author.photoUrl });
     } catch (err) { res.status(500).json({ error: 'Failed to post comment' }); }
@@ -691,9 +691,9 @@ app.post('/api/classes/:classId/assignments', requireRole(['ADMIN', 'STAFF']), a
         }
 
         res.json({ success: true, id: assignmentId });
-    } catch (err) { 
+    } catch (err) {
         console.error(err);
-        res.status(500).json({ error: 'Failed' }); 
+        res.status(500).json({ error: 'Failed' });
     }
 });
 
@@ -728,10 +728,10 @@ app.get('/api/assignments/:assignmentId/mysubmission/:studentId', async (req, re
                 [subId, req.params.assignmentId, req.params.studentId, 'Assigned', req.user.organizationId]);
             sub = await get('SELECT * FROM submissions WHERE id = ?', [subId]);
         }
-        
+
         const files = await query(`SELECT * FROM attachments WHERE parentId = ? AND parentType = 'SUBMISSION'`, [sub.id]);
         sub.submittedFiles = files;
-        
+
         res.json(sub);
     } catch (err) { res.status(500).json({ error: 'Failed' }); }
 });
@@ -751,12 +751,12 @@ app.get('/api/assignments/:assignmentId/submissions', async (req, res) => {
             JOIN users u ON s.studentId = u.id
             WHERE s.assignmentId = ? AND s.isDeleted = 0
         `, [req.params.assignmentId]);
-        
+
         for (const sub of subs) {
             const files = await query(`SELECT * FROM attachments WHERE parentId = ? AND parentType = 'SUBMISSION'`, [sub.id]);
             sub.submittedFiles = files;
         }
-        
+
         res.json(subs);
     } catch (err) { res.status(500).json({ error: 'Failed' }); }
 });
@@ -840,7 +840,7 @@ app.post('/api/classes/:classId/sheet', requireRole(['ADMIN', 'STAFF']), async (
         for (const [studentId, data] of Object.entries(records)) {
             const status = typeof data === 'string' ? data : data.status;
             const remarks = typeof data === 'string' ? '' : (data.remarks || '');
-            
+
             await run(`INSERT INTO attendance_records (id, sessionId, studentId, organizationId, status, remarks, joinedAt, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
                 [`REC${Date.now()}_${studentId}`, session.id, studentId, req.user.organizationId, status, remarks, new Date().toISOString(), new Date().toISOString()]);
 
@@ -865,7 +865,7 @@ app.post('/api/classes/:classId/sheet', requireRole(['ADMIN', 'STAFF']), async (
                 FROM attendance_records 
                 WHERE studentId = ? AND organizationId = ? AND isDeleted = 0
             `, [studentId, req.user.organizationId]);
-            
+
             if (stats && stats.total >= 5) {
                 const percentage = (stats.present / stats.total) * 100;
                 if (percentage < 75) {
@@ -889,7 +889,7 @@ app.post('/api/classes/:classId/sheet', requireRole(['ADMIN', 'STAFF']), async (
                     WHERE studentId = ? AND isDeleted = 0 
                     ORDER BY joinedAt DESC LIMIT 3
                 `, [studentId]);
-                
+
                 if (recentRecords.length === 3 && recentRecords.every(r => r.status === 'ABSENT')) {
                     const parents = await query('SELECT parentId FROM parent_student_relationships WHERE studentId = ?', [studentId]);
                     for (const p of parents) {
@@ -914,7 +914,7 @@ app.post('/api/classes/:classId/sheet', requireRole(['ADMIN', 'STAFF']), async (
 app.put('/api/attendance/records/:id', async (req, res) => {
     const { id } = req.params;
     const { status, remarks } = req.body;
-    
+
     try {
         await run(
             'UPDATE attendance_records SET status = ?, remarks = ? WHERE id = ?',
@@ -1061,7 +1061,7 @@ app.get('/api/admin/attendance/report', requireRole(['ADMIN']), async (req, res)
 app.get('/api/attendance/analytics/:studentId', async (req, res) => {
     try {
         const { studentId } = req.params;
-        
+
         // Security check
         if (req.user.role === 'PARENT') {
             const rel = await get('SELECT * FROM parent_student_relationships WHERE parentId = ? AND studentId = ?', [req.user.userId, studentId]);
@@ -1150,7 +1150,7 @@ app.get('/api/classes/:classId/my-attendance', async (req, res) => {
 app.post('/api/sessions/:sessionId/end', requireRole(['ADMIN', 'STAFF']), async (req, res) => {
     try {
         await run(`UPDATE attendance_sessions SET status = 'CLOSED', endTime = ? WHERE id = ?`, [new Date().toISOString(), req.params.sessionId]);
-        
+
         const students = await query(`SELECT userId FROM class_memberships WHERE classId = ? AND role = 'STUDENT'`, [req.body.classId]);
         const presentRecs = await query('SELECT studentId FROM attendance_records WHERE sessionId = ?', [req.params.sessionId]);
         const presentIds = new Set(presentRecs.map(r => r.studentId));
@@ -1279,13 +1279,13 @@ app.put('/api/leave-requests/:id/status', requireRole(['ADMIN', 'STAFF']), async
         const { status, staffRemarks, staffId } = req.body;
         await run('UPDATE leave_requests SET status = ?, staffRemarks = ?, reviewedBy = ?, reviewedAt = ? WHERE id = ?',
             [status, staffRemarks, staffId, new Date().toISOString(), req.params.id]);
-        
+
         const lr = await get('SELECT * FROM leave_requests WHERE id = ?', [req.params.id]);
         const student = await get('SELECT name, parentId FROM users WHERE id = ?', [lr.studentId]);
-        
+
         // Notify Student
         await triggerNotification(lr.studentId, 'STUDENT', 'LEAVE', 'Leave Request Update', `Your ${lr.type} request has been ${status.toLowerCase()}.`, `/dashboard`, lr.organizationId);
-        
+
         // Notify Parent
         if (student.parentId) {
             await triggerNotification(student.parentId, 'PARENT', 'LEAVE', 'Child Request Update', `${student.name}'s ${lr.type} request has been ${status.toLowerCase()}.`, `/dashboard`, lr.organizationId);
@@ -1299,14 +1299,14 @@ app.put('/api/leave-requests/:id/status', requireRole(['ADMIN', 'STAFF']), async
                 AND startTime BETWEEN ? AND ? 
                 AND isDeleted = 0
             `, [lr.classId, lr.fromDate, lr.toDate + 'T23:59:59']);
-            
+
             for (const sess of sessions) {
                 const existing = await get('SELECT id FROM attendance_records WHERE sessionId = ? AND studentId = ?', [sess.id, lr.studentId]);
                 if (existing) {
                     await run('UPDATE attendance_records SET status = ? WHERE id = ?', ['OD', existing.id]);
                 } else {
                     await run('INSERT INTO attendance_records (id, sessionId, studentId, organizationId, status, joinedAt) VALUES (?, ?, ?, ?, ?, ?)',
-                        [`REC${Date.now()}_${Math.random().toString(36).substring(2,5)}`, sess.id, lr.studentId, lr.organizationId, 'OD', new Date().toISOString()]);
+                        [`REC${Date.now()}_${Math.random().toString(36).substring(2, 5)}`, sess.id, lr.studentId, lr.organizationId, 'OD', new Date().toISOString()]);
                 }
             }
         }
@@ -1321,7 +1321,7 @@ app.post('/api/no-due-requests', async (req, res) => {
         const id = `ND${Date.now()}`;
         await run(`INSERT INTO no_due_requests (id, studentId, organizationId, reason, createdAt) VALUES (?, ?, ?, ?, ?)`,
             [id, req.user.userId, req.user.organizationId, req.body.reason, new Date().toISOString()]);
-        
+
         // Notify Admin and relevant staff (simplified: notify all staff in student's classes)
         const staff = await query(`
             SELECT DISTINCT m.userId 
@@ -1329,11 +1329,11 @@ app.post('/api/no-due-requests', async (req, res) => {
             JOIN class_memberships sm ON m.classId = sm.classId 
             WHERE sm.userId = ? AND m.role IN ('STAFF', 'ADMIN')
         `, [req.user.userId]);
-        
+
         for (const s of staff) {
             await triggerNotification(s.userId, 'STAFF', 'NODUE', 'New No-Due Request', `A student has submitted a No-Due request.`, `/dashboard`, req.user.organizationId);
         }
-        
+
         res.json({ success: true, id });
     } catch (err) { res.status(500).json({ error: 'Failed' }); }
 });
@@ -1362,7 +1362,7 @@ app.put('/api/no-due-requests/:id/review', requireRole(['STAFF', 'ADMIN']), asyn
     try {
         await run('UPDATE no_due_requests SET status = ?, teacherRemarks = ?, teacherReviewedBy = ?, teacherReviewedAt = ? WHERE id = ?',
             [req.body.status, req.body.remarks, req.user.userId, new Date().toISOString(), req.params.id]);
-        
+
         // Notify Admin if teacher approved
         if (req.body.status === 'TEACHER_APPROVED') {
             const admins = await query(`SELECT id FROM users WHERE role = 'ADMIN' AND organizationId = (SELECT organizationId FROM no_due_requests WHERE id = ?)`, [req.params.id]);
@@ -1370,7 +1370,7 @@ app.put('/api/no-due-requests/:id/review', requireRole(['STAFF', 'ADMIN']), asyn
                 await triggerNotification(admin.id, 'ADMIN', 'NODUE', 'No-Due Review Update', `A No-Due request is ready for final approval.`, `/dashboard`, req.user.organizationId);
             }
         }
-        
+
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: 'Failed' }); }
 });
@@ -1379,10 +1379,10 @@ app.put('/api/no-due-requests/:id/finalize', requireRole(['ADMIN']), async (req,
     try {
         await run('UPDATE no_due_requests SET status = ?, adminRemarks = ?, adminReviewedBy = ?, adminReviewedAt = ? WHERE id = ?',
             ['COMPLETED', req.body.remarks, req.user.userId, new Date().toISOString(), req.params.id]);
-        
+
         const nd = await get('SELECT studentId, organizationId FROM no_due_requests WHERE id = ?', [req.params.id]);
         await triggerNotification(nd.studentId, 'STUDENT', 'NODUE', 'No-Due Finalized', `Your No-Due request has been completed.`, `/dashboard`, nd.organizationId);
-        
+
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: 'Failed' }); }
 });
@@ -1465,14 +1465,14 @@ app.get('/api/calendar', async (req, res) => {
                 WHERE u.parentId = ? AND a.isDeleted = 0
             `, [userId]);
         }
-        assignments.forEach(a => events.push({ 
-            id: a.id, 
-            title: a.title, 
-            date: a.dueDate, 
-            description: a.instructions, 
-            type: 'Assignment Due', 
+        assignments.forEach(a => events.push({
+            id: a.id,
+            title: a.title,
+            date: a.dueDate,
+            description: a.instructions,
+            type: 'Assignment Due',
             status: a.submissionStatus,
-            source: 'ASSIGNMENT' 
+            source: 'ASSIGNMENT'
         }));
 
         // 3. Approved Leave Requests
@@ -1641,7 +1641,7 @@ async function triggerNotification(userId, role, type, title, message, link, org
         await run(`INSERT INTO notifications (id, userId, role, type, title, message, link, organizationId, createdAt) 
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [id, userId, role, type, title, message, link, organizationId, new Date().toISOString()]);
-        
+
         // MODULE 2: Attendance SMS Alerts (Simulated)
         if (type === 'ATTENDANCE' && message.toLowerCase().includes('absent')) {
             const user = await get('SELECT phoneNumber FROM users WHERE id = ?', [userId]);
@@ -1812,7 +1812,7 @@ app.put('/api/leave-requests/:id/parent-approve', requireRole(['PARENT']), async
     try {
         const { status, remarks } = req.body;
         await run('UPDATE leave_requests SET parentApprovalStatus = ? WHERE id = ?', [status, req.params.id]);
-        
+
         // Trigger notification for student/staff if needed
         const lr = await get('SELECT studentId, organizationId FROM leave_requests WHERE id = ?', [req.params.id]);
         await triggerNotification(lr.studentId, 'STUDENT', 'LEAVE', 'Parent Approval Update', `Your parent has ${status.toLowerCase()} your leave request.`, `/dashboard/requests`, lr.organizationId);
@@ -2031,7 +2031,7 @@ app.put('/api/leave-requests/:id/parent-approval', requireRole(['PARENT']), asyn
     try {
         const { status, remarks } = req.body;
         await run('UPDATE leave_requests SET parentApprovalStatus = ?, parentRemarks = ? WHERE id = ?', [status, remarks, req.params.id]);
-        
+
         // Trigger notification for student/staff
         const lr = await get('SELECT studentId, organizationId FROM leave_requests WHERE id = ?', [req.params.id]);
         await triggerNotification(lr.studentId, 'STUDENT', 'LEAVE', 'Parent Approval Update', `Your parent has ${status.toLowerCase()} your leave request.`, `/dashboard/requests`, lr.organizationId);
@@ -2073,10 +2073,10 @@ app.post('/api/messages', async (req, res) => {
         const createdAt = new Date().toISOString();
         await run(`INSERT INTO messages (id, senderId, receiverId, content, createdAt) VALUES (?, ?, ?, ?, ?)`,
             [id, req.user.userId, receiverId, content, createdAt]);
-        
+
         // Emit via Socket
         io.to(`user_${receiverId}`).emit('message', { id, senderId: req.user.userId, content, createdAt });
-        
+
         res.json({ success: true, id, createdAt });
     } catch (err) { res.status(500).json({ error: 'Failed to send message' }); }
 });
@@ -2106,7 +2106,7 @@ app.get('/api/student/assignments', async (req, res) => {
     try {
         const { userId } = req.query;
         if (req.user.role !== 'ADMIN' && req.user.userId !== userId) return res.status(403).json({ error: 'Denied' });
-        
+
         const assignments = await query(`
             SELECT a.*, s.status as submissionStatus, s.grade, s.feedback
             FROM assignments a
