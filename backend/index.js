@@ -207,8 +207,8 @@ app.post('/api/login', authLimiter, async (req, res) => {
             [`RT${Date.now()}_${Math.random().toString(36).substring(2, 5)}`, user.id, user.organizationId, refreshToken, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()]);
 
         // Set Secure Cookies
-        res.cookie('accessToken', accessToken, { httpOnly: true, secure: isProd, sameSite: 'strict', maxAge: 15 * 60 * 1000 });
-        res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: isProd, sameSite: 'strict', maxAge: 7 * 24 * 60 * 60 * 1000 });
+        res.cookie('accessToken', accessToken, { httpOnly: true, secure: isProd, sameSite: isProd ? 'none' : 'lax', maxAge: 15 * 60 * 1000 });
+        res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: isProd, sameSite: isProd ? 'none' : 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 });
 
         const returnUser = { ...user };
         delete returnUser.passwordHash;
@@ -268,8 +268,8 @@ app.post('/api/register', authLimiter, async (req, res) => {
         await run(`INSERT INTO refresh_tokens (id, userId, organizationId, token, expiresAt) VALUES (?, ?, ?, ?, ?)`,
             [`RT${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, newUser.id, newUser.organizationId, refreshToken, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()]);
 
-        res.cookie('accessToken', accessToken, { httpOnly: true, secure: isProd, sameSite: 'strict', maxAge: 15 * 60 * 1000 });
-        res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: isProd, sameSite: 'strict', maxAge: 7 * 24 * 60 * 60 * 1000 });
+        res.cookie('accessToken', accessToken, { httpOnly: true, secure: isProd, sameSite: isProd ? 'none' : 'lax', maxAge: 15 * 60 * 1000 });
+        res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: isProd, sameSite: isProd ? 'none' : 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 });
 
         const returnUser = { ...newUser };
         delete returnUser.passwordHash;
@@ -329,8 +329,8 @@ app.post('/api/refresh', async (req, res) => {
         await run(`INSERT INTO refresh_tokens (id, userId, organizationId, token, expiresAt) VALUES (?, ?, ?, ?, ?)`,
             [`RT${Date.now()}_${Math.random().toString(36).substring(2, 7)}`, user.id, user.organizationId, newRefreshToken, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()]);
 
-        res.cookie('accessToken', newAccessToken, { httpOnly: true, secure: isProd, sameSite: 'strict', maxAge: 15 * 60 * 1000 });
-        res.cookie('refreshToken', newRefreshToken, { httpOnly: true, secure: isProd, sameSite: 'strict', maxAge: 7 * 24 * 60 * 60 * 1000 });
+        res.cookie('accessToken', newAccessToken, { httpOnly: true, secure: isProd, sameSite: isProd ? 'none' : 'lax', maxAge: 15 * 60 * 1000 });
+        res.cookie('refreshToken', newRefreshToken, { httpOnly: true, secure: isProd, sameSite: isProd ? 'none' : 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 });
 
         res.json({ success: true });
     } catch (err) {
