@@ -2,14 +2,14 @@
 
 React-based user interface for the Smart Space Classroom Management System.
 
-## 🚀 Features
+## Features
 - Interactive Dashboard with Analytics Widgets.
 - Integrated Calendar with Drag-and-Drop.
 - Student Performance Module.
 - Real-time Notifications.
 - Responsive design with Tailwind CSS.
 
-## 🛠 Setup & Installation
+## Setup & Installation
 
 1. **Install dependencies**:
    ```bash
