@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { User, Class } from '../types';
 import ClassCard from './ClassCard';
@@ -35,6 +36,8 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ user, onClassSelect, classes, refreshClasses }) => {
+    const navigate = useNavigate();
+    const [showProfileModal, setShowProfileModal] = useState(false);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showJoinModal, setShowJoinModal] = useState(false);
     const [chatWith, setChatWith] = useState<User | null>(null);
@@ -188,12 +191,45 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onClassSelect, classes, ref
                         <span>Manage your activities and stay updated.</span>
                     </p>
                 </div>
-                <div className="hidden sm:block">
-                    <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm border border-white/30">
+                <div className="hidden sm:block relative">
+                    <button 
+                        onClick={() => setShowProfileModal(!showProfileModal)}
+                        className="w-16 h-16 bg-white/20 hover:bg-white/30 transition-colors rounded-full flex items-center justify-center backdrop-blur-sm border border-white/30 cursor-pointer"
+                        title="View Profile"
+                    >
                         <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                         </svg>
-                    </div>
+                    </button>
+                    {showProfileModal && (
+                        <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-2xl border border-gray-100 z-50 text-gray-800 animate-fade-in-up">
+                            <div className="p-4 border-b border-gray-100">
+                                <p className="font-bold text-lg">{user.name}</p>
+                                <p className="text-sm text-indigo-600 font-medium">{user.role}</p>
+                            </div>
+                            <div className="p-4 bg-gray-50 rounded-b-xl">
+                                <p className="text-xs text-gray-500 uppercase tracking-wider font-bold mb-1">Your ID</p>
+                                <div className="flex items-center justify-between bg-white p-2 border border-gray-200 rounded-lg text-sm font-mono text-gray-700">
+                                    <span className="select-all">{user.id}</span>
+                                    <button 
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(user.id);
+                                            alert("ID copied to clipboard!");
+                                        }}
+                                        className="p-1 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded transition-colors"
+                                        title="Copy ID"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                                    </button>
+                                </div>
+                                {(user.role === 'STUDENT') && (
+                                    <p className="text-[11px] text-gray-500 mt-2 leading-tight">
+                                        Give this ID to your parent so they can securely link their account.
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
                 
                 {user.role === 'PARENT' && linkedStudents.length > 1 && (
@@ -291,6 +327,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onClassSelect, classes, ref
                         {notifications.some(n => !n.isRead) && (
                             <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 border-2 border-white rounded-full"></span>
                         )}
+                    </button>
+
+                    <button
+                        onClick={() => navigate('/chat')}
+                        className="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 px-4 py-2 rounded text-sm font-medium mr-2"
+                    >
+                        Open Chat
                     </button>
 
                     {activeTab === 'classes' || activeTab === 'overview' ? (

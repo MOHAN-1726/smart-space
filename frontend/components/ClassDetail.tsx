@@ -4,20 +4,33 @@ import StreamTab from './StreamTab';
 import ClassworkTab from './ClassworkTab';
 import PeopleTab from './PeopleTab';
 import AttendanceTab from './attendance/AttendanceTab';
-
+import { useParams } from 'react-router-dom';
 import StaffLeaveDashboard from './StaffLeaveDashboard';
 
 interface ClassDetailProps {
-    classData: Class;
+    classes: Class[];
     user: User;
     onBack: () => void;
 }
 
 type Tab = 'stream' | 'classwork' | 'people' | 'attendance' | 'requests';
 
-const ClassDetail: React.FC<ClassDetailProps> = ({ classData, user, onBack }) => {
+const ClassDetail: React.FC<ClassDetailProps> = ({ classes, user, onBack }) => {
+    const { classId } = useParams<{ classId: string }>();
+    const classData = classes.find(c => c.id === classId);
+    
     const [activeTab, setActiveTab] = useState<Tab>('stream');
     const [initialFilter, setInitialFilter] = useState<string | undefined>(undefined);
+    
+    if (!classData) {
+        return (
+            <div className="p-8 text-center">
+                <p className="text-gray-500 mb-4">Class not found or loading...</p>
+                <button onClick={onBack} className="text-blue-600 hover:underline">Go back</button>
+            </div>
+        );
+    }
+
     const isStaff = user.role === 'STAFF';
     const canDeleteClass =
         user.role === 'ADMIN' || (user.role === 'STAFF' && classData.ownerId === user.id);

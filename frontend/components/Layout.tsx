@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
+import { Outlet } from 'react-router-dom';
 import { User, Class } from '../types';
 
 interface LayoutProps {
     user: User;
     title?: string;
     onLogout: () => void;
-    children: React.ReactNode;
     classes?: Class[];
 }
 
-const Layout: React.FC<LayoutProps> = ({ user, title = 'Classroom', onLogout, children, classes = [] }) => {
+const Layout: React.FC<LayoutProps> = ({ user, title = 'Classroom', onLogout, classes = [] }) => {
     const [userMenuOpen, setUserMenuOpen] = useState(false);
     const userMenuRef = React.useRef<HTMLDivElement>(null);
 
@@ -86,7 +86,7 @@ const Layout: React.FC<LayoutProps> = ({ user, title = 'Classroom', onLogout, ch
             {/* Main Content */}
             <main className="flex-1 pt-16">
                 <div className="p-8">
-                    {children}
+                    <Outlet />
                 </div>
             </main>
         </div>

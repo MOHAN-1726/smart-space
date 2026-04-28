@@ -51,7 +51,8 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       const data = await api.post(url, formData);
       if (data.success && data.user) {
         onLoginSuccess(data.user);
-        const rolePath = data.user.role.toLowerCase();
+        const role = data.user.role;
+        const rolePath = role === 'STAFF' ? 'teacher' : role.toLowerCase();
         navigate(`/${rolePath}`);
       } else {
         setError(data.message || 'Authentication failed');

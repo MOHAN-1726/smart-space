@@ -18,6 +18,7 @@ import cron from 'node-cron';
 
 import { get, query, run, initDatabase } from './database.js';
 import { authMiddleware, requireRole } from './authMiddleware.js';
+import backupRoutes from './routes/backupRoutes.js';
 
 // Setup basic Express
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -31,6 +32,13 @@ const allowedOrigins = [
 const io = new Server(server, {
     cors: { origin: process.env.FRONTEND_URL || 'http://localhost:5173', credentials: true }
 });
+
+io.on("connection", (socket) => {
+    socket.on("sendMessage", (data) => {
+        io.emit("receiveMessage", data);
+    });
+});
+
 const PORT = process.env.PORT || 5001;
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -41,6 +49,8 @@ app.use(helmet());
 app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:5173', credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
+
+app.use('/api', backupRoutes);
 
 const globalLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 1000 });
 app.use((req, res, next) => {
@@ -91,11 +101,20 @@ const storage = multer.diskStorage({
     }
 });
 
-// Create upload middleware
 const upload = multer({
     storage: storage,
     limits: {
         fileSize: 10 * 1024 * 1024 // 10MB
+    },
+    fileFilter: (req, file, cb) => {
+        const allowedMimeTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+        const allowedExtensions = /\.(pdf|jpg|jpeg|png|doc|docx)$/i;
+        
+        if (allowedMimeTypes.includes(file.mimetype) && allowedExtensions.test(file.originalname)) {
+            cb(null, true);
+        } else {
+            cb(new Error('Invalid file type. Only PDF, DOC, and images are allowed.'));
+        }
     }
 });
 
@@ -323,31 +342,54 @@ app.post('/api/classes', requireRole(['ADMIN', 'STAFF']), async (req, res) => {
             [classId, name, section, subject, room, description, ownerId, theme || 'theme-blue', req.user.organizationId, enrollmentCode, new Date().toISOString()]);
         
         await run(`INSERT INTO class_memberships (id, userId, classId, role) VALUES (?, ?, ?, ?)`,
-            [`M${Date.now()}`, ownerId, classId, 'STAFF']);
+            [`M${Date.now()}_${Math.random().toString(36).substr(2, 4)}`, ownerId, classId, 'STAFF']);
 
         res.json({ success: true, id: classId, enrollmentCode });
     } catch (err) {
-        console.error(err);
+        console.error('[CLASSES] Create Error:', err);
         res.status(500).json({ error: 'Failed to create class' });
     }
 });
 
 app.post('/api/classes/join', async (req, res) => {
     const { enrollmentCode } = req.body;
-    const userId = req.user.userId;
+    const userId = req.user.userId || req.user.id;
+    console.log('[JOIN] CRITICAL DEBUG:', { 
+        body: req.body, 
+        user: { id: req.user.id, userId: req.user.userId, orgId: req.user.organizationId } 
+    });
+    
     try {
         const cls = await get('SELECT * FROM classes WHERE enrollmentCode = ? AND organizationId = ? AND isDeleted = 0', [enrollmentCode, req.user.organizationId]);
-        if (!cls) return res.status(404).json({ error: 'Invalid code' });
+        if (!cls) {
+            console.log('[JOIN] FAILED: Class not found for code:', enrollmentCode, 'in Org:', req.user.organizationId);
+            return res.status(404).json({ error: 'Invalid code or organization mismatch' });
+        }
+
+        console.log('[JOIN] STEP: Class found:', cls.id);
 
         const existing = await get('SELECT * FROM class_memberships WHERE userId = ? AND classId = ?', [userId, cls.id]);
-        if (existing) return res.status(409).json({ error: 'Already joined' });
+        if (existing) {
+            console.log('[JOIN] ALREADY JOINED:', { userId, classId: cls.id });
+            return res.status(409).json({ error: 'Already joined' });
+        }
 
-        await run(`INSERT INTO class_memberships (id, userId, classId, role) VALUES (?, ?, ?, ?)`,
-            [`M${Date.now()}`, userId, cls.id, 'STUDENT']);
+        const mId = `M${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+        console.log('[JOIN] STEP: Inserting membership:', { id: mId, userId, classId: cls.id });
+        
+        const result = await run(`INSERT INTO class_memberships (id, userId, classId, role) VALUES (?, ?, ?, ?)`,
+            [mId, userId, cls.id, 'STUDENT']);
+
+        console.log('[JOIN] SUCCESS: Membership result:', result);
+        
+        // Verification SELECT
+        const verified = await get('SELECT * FROM class_memberships WHERE id = ?', [mId]);
+        console.log('[JOIN] VERIFICATION:', verified ? 'FOUND' : 'NOT FOUND!');
 
         res.json({ success: true, classId: cls.id });
     } catch (err) {
-        res.status(500).json({ error: 'Failed to join class' });
+        console.error('[JOIN] FATAL ERROR:', err);
+        res.status(500).json({ error: 'Failed to join class', details: err.message });
     }
 });
 
@@ -355,7 +397,7 @@ app.post('/api/classes/join', async (req, res) => {
 app.get('/api/classes', async (req, res) => {
     try {
         const classes = await query(`
-            SELECT c.*, m.role as userRole, u.name as ownerName, u.photoUrl as ownerPhoto
+            SELECT c.*, m.role as role, u.name as ownerName, u.photoUrl as ownerPhoto
             FROM classes c
             JOIN class_memberships m ON c.id = m.classId
             JOIN users u ON c.ownerId = u.id
@@ -378,7 +420,7 @@ app.get('/api/users/:userId/classes', async (req, res) => {
 
         console.log('[CLASSES] Fetching classes for user:', userId, 'Org:', req.user.organizationId);
         const classes = await query(`
-            SELECT c.*, m.role as userRole, u.name as ownerName, u.photoUrl as ownerPhoto
+            SELECT c.*, m.role as role, u.name as ownerName, u.photoUrl as ownerPhoto
             FROM classes c
             JOIN class_memberships m ON c.id = m.classId
             JOIN users u ON c.ownerId = u.id
@@ -1127,6 +1169,16 @@ app.post('/api/sessions/:sessionId/end', requireRole(['ADMIN', 'STAFF']), async 
 
 app.post('/api/leave-requests', async (req, res) => {
     try {
+        // Prevent Duplicate Requests
+        const existing = await get(`
+            SELECT id FROM leave_requests 
+            WHERE studentId = ? AND fromDate = ? AND toDate = ? AND type = ? AND isDeleted = 0
+        `, [req.body.studentId, req.body.fromDate, req.body.toDate, req.body.type]);
+
+        if (existing) {
+            return res.status(409).json({ error: 'A duplicate request for these dates already exists.' });
+        }
+
         const id = `LR${Date.now()}`;
         await run(`INSERT INTO leave_requests (id, studentId, classId, organizationId, subject, fromDate, toDate, type, studyType, reason, documentUrl, status, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [id, req.body.studentId, req.body.classId, req.user.organizationId, req.body.subject, req.body.fromDate, req.body.toDate, req.body.type, req.body.studyType, req.body.reason, req.body.documentUrl, 'PENDING', new Date().toISOString()]);
@@ -2204,11 +2256,64 @@ cron.schedule('0 17 * * *', async () => {
 });
 
 // Serve frontend static files
-app.use(express.static(path.join(__dirname, '../frontend/dist')));
+app.use(express.static(path.join(process.cwd(), 'frontend/dist')));
+
+// --- MESSAGING ROUTES ---
+app.post('/api/messages/send', async (req, res) => {
+    try {
+        const { receiverId, message } = req.body;
+        const senderId = req.user.userId || req.user.id;
+        const messageId = `MSG${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+        const timestamp = new Date().toISOString();
+
+        await run(
+            'INSERT INTO messages (id, senderId, receiverId, content, isRead, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
+            [messageId, senderId, receiverId, message, 0, timestamp]
+        );
+
+        const newMessage = await get('SELECT * FROM messages WHERE id = ?', [messageId]);
+        // Rename content to message to match frontend expectation
+        newMessage.message = newMessage.content;
+        res.json(newMessage);
+    } catch (err) {
+        console.error('[MESSAGING] Send Error:', err);
+        res.status(500).json({ error: 'Failed to send message' });
+    }
+});
+
+app.get('/api/messages/history/:userId', async (req, res) => {
+    try {
+        const otherUserId = req.params.userId;
+        const currentUserId = req.user.userId || req.user.id;
+
+        const messages = await query(`
+            SELECT * FROM messages 
+            WHERE (senderId = ? AND receiverId = ?) 
+               OR (senderId = ? AND receiverId = ?)
+            ORDER BY createdAt ASC
+        `, [currentUserId, otherUserId, otherUserId, currentUserId]);
+
+        // Rename content to message
+        const mappedMessages = messages.map(m => ({ ...m, message: m.content }));
+        res.json(mappedMessages);
+    } catch (err) {
+        console.error('[MESSAGING] History Error:', err);
+        res.status(500).json({ error: 'Failed to get message history' });
+    }
+});
 
 // Handle React routing
+app.get('/api/users', async (req, res) => {
+    try {
+        const users = await query('SELECT id, name, role, email, photoUrl FROM users WHERE organizationId = ? AND isDeleted = 0', [req.user.organizationId]);
+        res.json(users);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch users' });
+    }
+});
+
 app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
+    res.sendFile(path.join(process.cwd(), 'frontend/dist/index.html'));
 });
 
 // Global Error Handler
