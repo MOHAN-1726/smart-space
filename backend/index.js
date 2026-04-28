@@ -2279,8 +2279,16 @@ cron.schedule('0 17 * * *', async () => {
     }
 });
 
-// Serve frontend static files
-app.use(express.static(path.join(process.cwd(), 'frontend/dist')));
+const frontendPath = path.join(process.cwd(), 'frontend/dist');
+const fallbackFrontendPath = path.join(process.cwd(), '../frontend/dist');
+const finalFrontendPath = fs.existsSync(frontendPath) ? frontendPath : fallbackFrontendPath;
+
+if (fs.existsSync(finalFrontendPath)) {
+    app.use(express.static(finalFrontendPath));
+    console.log(`[STATIC] Serving frontend from: ${finalFrontendPath}`);
+} else {
+    console.warn(`[STATIC] Frontend directory not found at ${frontendPath} or ${fallbackFrontendPath}`);
+}
 
 // --- MESSAGING ROUTES ---
 app.post('/api/messages/send', async (req, res) => {
@@ -2337,7 +2345,16 @@ app.get('/api/users', async (req, res) => {
 });
 
 app.get('*', (req, res) => {
-    res.sendFile(path.join(process.cwd(), 'frontend/dist/index.html'));
+    const indexPath = path.join(finalFrontendPath, 'index.html');
+    if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+    } else {
+        res.status(404).json({ 
+            error: "Route not found", 
+            path: req.url,
+            message: "This is a backend-only deployment or the frontend build is missing." 
+        });
+    }
 });
 
 // Global Error Handler

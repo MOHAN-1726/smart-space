@@ -1,5 +1,13 @@
 import { logger } from './utils/logger';
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+const getBaseUrl = () => {
+    let url = import.meta.env.VITE_API_BASE_URL || '/api';
+    // If it's an absolute URL and doesn't end with /api, append it
+    if (url.startsWith('http') && !url.endsWith('/api')) {
+        url = url.endsWith('/') ? `${url}api` : `${url}/api`;
+    }
+    return url;
+};
+const API_BASE_URL = getBaseUrl();
 
 // Guard against concurrent refresh attempts
 let isRefreshing = false;
