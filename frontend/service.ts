@@ -150,16 +150,19 @@ export const api = {
     getAttendanceAnalyticsDetailed: (studentId: string) => api.get(`/attendance/analytics/${studentId}`),
     getAdminAttendanceClasses: () => api.get('/admin/attendance/classes'),
     getAdminAttendanceReport: (filters: any) => {
-        const query = new URLSearchParams(
-            Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '' && v !== null && v !== undefined))
-        ).toString();
-        return api.get(`/admin/attendance/report?${query}`);
+        const query = new URLSearchParams();
+        Object.entries(filters).forEach(([k, v]) => {
+            if (v !== '' && v !== null && v !== undefined) query.append(k, String(v));
+        });
+        return api.get(`/admin/attendance/report?${query.toString()}`);
     },
     downloadAttendanceReportCSV: async (filters: any) => {
-        const params = new URLSearchParams(
-            Object.fromEntries(Object.entries({ ...filters, format: 'csv' }).filter(([, v]) => v !== '' && v !== null && v !== undefined))
-        ).toString();
-        const res = await fetch(`${API_BASE_URL}/admin/attendance/report?${params}`, {
+        const query = new URLSearchParams();
+        const allParams = { ...filters, format: 'csv' };
+        Object.entries(allParams).forEach(([k, v]) => {
+            if (v !== '' && v !== null && v !== undefined) query.append(k, String(v));
+        });
+        const res = await fetch(`${API_BASE_URL}/admin/attendance/report?${query.toString()}`, {
             credentials: 'include'
         });
         if (!res.ok) throw new Error('CSV download failed');
